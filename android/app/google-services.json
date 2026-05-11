@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "555308609426",
+    "project_id": "meetradius-ae49c",
+    "storage_bucket": "meetradius-ae49c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:555308609426:android:33880fc9797d4dc424db4b",
+        "android_client_info": {
+          "package_name": "com.example.meet_radius"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCF5XHNyF9gsoe6aDoOJVgueJrN7sN33rc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
