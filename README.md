@@ -2,6 +2,10 @@
 
 A new Flutter project.
 
+## Product specification
+
+- [MVP product spec (UX and scope)](docs/PRODUCT_MVP.md)
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
