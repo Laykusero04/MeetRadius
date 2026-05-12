@@ -1,31 +1,52 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
-/// Creates an Auth account and a profile document at `users/{email}`.
-///
-/// Document id is the normalized email (trimmed, lower case) so it matches
-/// the address users type, with a single doc per mailbox.
+/// Creates a Firebase Auth account, sets [User.displayName], and writes `users/{uid}` in Firestore.
 Future<void> registerUserWithProfile({
   required String email,
   required String password,
+  required String firstName,
+  required String lastName,
 }) async {
   final normalizedEmail = email.trim().toLowerCase();
+  final trimmedFirst = firstName.trim();
+  final trimmedLast = lastName.trim();
 
   final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
     email: normalizedEmail,
     password: password,
   );
 
-  final uid = credential.user?.uid;
-  if (uid == null) {
-    throw StateError('Registration succeeded but user uid is null.');
+  final user = credential.user;
+  if (user == null) {
+    throw StateError('Registration succeeded but user is null.');
   }
 
-  await FirebaseFirestore.instance.collection('users').doc(normalizedEmail).set({
-    'email': normalizedEmail,
-    'uid': uid,
-    'createdAt': FieldValue.serverTimestamp(),
-  });
+  final fullName = '$trimmedFirst $trimmedLast'.trim();
+  if (fullName.isNotEmpty) {
+    try {
+      await user.updateDisplayName(fullName);
+    } catch (e) {
+      debugPrint('MeetRadius: updateDisplayName failed (non-fatal): $e');
+    }
+  }
+
+  try {
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'email': normalizedEmail,
+      'firstName': trimmedFirst,
+      'lastName': trimmedLast,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  } catch (e) {
+    try {
+      await user.delete();
+    } catch (_) {
+      // Best-effort cleanup; original error is more important.
+    }
+    rethrow;
+  }
 }
 
 String messageForAuthException(FirebaseAuthException e) {

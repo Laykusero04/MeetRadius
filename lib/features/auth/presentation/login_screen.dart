@@ -2,7 +2,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../feed/presentation/home_feed_screen.dart';
 import 'register_screen.dart';
 
 /// Email/password UI; wire to Firebase Auth when ready.
@@ -32,16 +31,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _submitting = true);
     final messenger = ScaffoldMessenger.of(context);
-    final nav = Navigator.of(context);
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim().toLowerCase(),
         password: _passwordController.text,
-      );
-      if (!mounted) return;
-      nav.pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const HomeFeedScreen()),
-        (_) => false,
       );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;

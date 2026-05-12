@@ -1,24 +1,19 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../activity/data/join_activity.dart';
+import '../../../activity/data/watch_activities.dart';
 import '../../../activity/domain/activity.dart';
 import '../../application/feed_filter_cubit.dart';
 import 'activity_feed_labels.dart';
 import 'live_activity_card.dart';
 import 'upcoming_activity_card.dart';
 
-/// Feed driven by Firestore `activities` plus category chips.
+/// Feed UI backed by Firestore `activities` (see [watchActivities]).
 class FeedBody extends StatelessWidget {
   const FeedBody({super.key});
-
-  static final _activitiesQuery = FirebaseFirestore.instance
-      .collection('activities')
-      .orderBy('createdAt', descending: true)
-      .limit(40);
 
   @override
   Widget build(BuildContext context) {
@@ -26,54 +21,33 @@ class FeedBody extends StatelessWidget {
 
     return BlocBuilder<FeedFilterCubit, ({int chipIndex})>(
       builder: (context, filter) {
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _activitiesQuery.snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'Could not load feed.\n${snapshot.error}',
-                          textAlign: TextAlign.center,
-                          style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-                        ),
-                      ),
-                    ),
+        return StreamBuilder<List<Activity>>(
+          stream: watchActivities(),
+          builder: (context, listSnap) {
+            if (listSnap.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Could not load activities.\n${listSnap.error}',
+                    style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                    textAlign: TextAlign.center,
                   ),
-                ],
+                ),
               );
             }
 
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                !snapshot.hasData) {
-              return const CustomScrollView(
-                physics: AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(child: CircularProgressIndicator(color: AppColors.liveAccent)),
-                  ),
-                ],
-              );
-            }
-
-            final docs = snapshot.data?.docs ?? [];
-            final all = docs.map(Activity.fromDoc).toList();
+            final all = listSnap.data ?? const <Activity>[];
             final filtered = all.where((a) => a.matchesFeedChip(filter.chipIndex)).toList();
             final live = filtered.where((a) => a.isLive).toList();
             final upcoming = filtered.where((a) => !a.isLive).toList();
             final now = DateTime.now();
+            final loading = listSnap.connectionState == ConnectionState.waiting && all.isEmpty;
 
             return RefreshIndicator(
               color: AppColors.liveAccent,
               onRefresh: () async {
-                await _activitiesQuery.get(const GetOptions(source: Source.server));
+                await Future<void>.delayed(const Duration(milliseconds: 400));
               },
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -85,134 +59,147 @@ class FeedBody extends StatelessWidget {
                       onSelect: context.read<FeedFilterCubit>().selectChip,
                     ),
                   ),
+                  if (loading)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
+                    ),
                   const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Row(
-                        children: [
-                          Text('🔥 ', style: textTheme.labelLarge),
-                          Text(
-                            'LIVE NOW',
-                            style: textTheme.labelLarge?.copyWith(
-                              color: AppColors.textSecondary,
-                              letterSpacing: 1.2,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${live.length}',
-                            style: textTheme.labelLarge?.copyWith(
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    children: [
+                      Text('🔥 ', style: textTheme.labelLarge),
+                      Text(
+                        'LIVE NOW',
+                        style: textTheme.labelLarge?.copyWith(
+                          color: AppColors.textSecondary,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
+                      const Spacer(),
+                      Text(
+                        '${live.length}',
+                        style: textTheme.labelLarge?.copyWith(
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (live.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text(
+                      'No live activities in this filter. Host one from the Host tab.',
+                      style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
                     ),
                   ),
-                  if (live.isEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Text(
-                          'No live activities in this filter. Host one from the Host tab.',
-                          style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
-                        ),
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final a = live[index];
-                            return Padding(
-                              padding: EdgeInsets.only(bottom: index < live.length - 1 ? 12 : 0),
-                              child: LiveActivityCard(
-                                title: a.title,
-                                category: a.category,
-                                startsIn: activityStartsInLine(a.startsAt, now),
-                                distance: a.spot.isEmpty ? 'Nearby' : a.spot,
-                                joinedLabel: '${a.joinedCount} of ${a.capacity} joined',
-                                socialLine: '',
-                                friendInitials: const [],
-                                friendNamesLine: null,
-                                joinButtonLabel: _joinLabel(a),
-                                joinEnabled: _joinEnabled(a),
-                                onJoin: () => _tryJoinActivity(context, a),
-                              ),
-                            );
-                          },
-                          childCount: live.length,
-                        ),
-                      ),
-                    ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-                      child: Row(
-                        children: [
-                          Text(
-                            'UPCOMING',
-                            style: textTheme.labelLarge?.copyWith(
-                              color: AppColors.textMuted,
-                              letterSpacing: 1.2,
-                              fontWeight: FontWeight.w700,
-                            ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final a = live[index];
+                        return Padding(
+                          padding: EdgeInsets.only(bottom: index < live.length - 1 ? 12 : 0),
+                          child: LiveActivityCard(
+                            title: a.title,
+                            category: a.category,
+                            startsIn: activityStartsInLine(a.startsAt, now),
+                            distance: a.spot.isEmpty ? 'Nearby' : a.spot,
+                            joinedLabel: '${a.joinedCount} of ${a.capacity} joined',
+                            socialLine: '',
+                            friendInitials: const [],
+                            friendNamesLine: null,
+                            joinButtonLabel: _joinLabel(a),
+                            joinEnabled: _joinEnabled(a),
+                            onJoin: () => _tryJoinActivity(context, a),
                           ),
-                          const Spacer(),
-                          Text(
-                            '${upcoming.length}',
-                            style: textTheme.labelLarge?.copyWith(
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
+                        );
+                      },
+                      childCount: live.length,
                     ),
                   ),
-                  if (upcoming.isEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                        child: Text(
-                          'No upcoming activities here yet.',
-                          style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+                ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        'UPCOMING',
+                        style: textTheme.labelLarge?.copyWith(
+                          color: AppColors.textMuted,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final a = upcoming[index];
-                            return Padding(
-                              padding: EdgeInsets.only(
-                                bottom: index < upcoming.length - 1 ? 12 : 0,
-                              ),
-                              child: UpcomingActivityCard(
-                                schedulePill: activitySchedulePill(a.startsAt),
-                                category: a.category,
-                                title: a.title,
-                                distance: a.spot.isEmpty ? 'Nearby' : a.spot,
-                                goingLabel: '${a.joinedCount} of ${a.capacity} going',
-                                friendsLine: 'Friends going will show here later.',
-                                joinButtonLabel: _joinLabel(a),
-                                joinEnabled: _joinEnabled(a),
-                                onJoin: () => _tryJoinActivity(context, a),
-                              ),
-                            );
-                          },
-                          childCount: upcoming.length,
+                      const Spacer(),
+                      Text(
+                        '${upcoming.length}',
+                        style: textTheme.labelLarge?.copyWith(
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              if (upcoming.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    child: Text(
+                      'No upcoming activities here yet.',
+                      style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
                     ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final a = upcoming[index];
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index < upcoming.length - 1 ? 12 : 0,
+                          ),
+                          child: UpcomingActivityCard(
+                            schedulePill: activitySchedulePill(a.startsAt),
+                            category: a.category,
+                            title: a.title,
+                            distance: a.spot.isEmpty ? 'Nearby' : a.spot,
+                            goingLabel: '${a.joinedCount} of ${a.capacity} going',
+                            friendsLine: 'Friends going will show here later.',
+                            joinButtonLabel: _joinLabel(a),
+                            joinEnabled: _joinEnabled(a),
+                            onJoin: () => _tryJoinActivity(context, a),
+                          ),
+                        );
+                      },
+                      childCount: upcoming.length,
+                    ),
+                  ),
+                ),
                   const SliverToBoxAdapter(child: SizedBox(height: 80)),
                 ],
               ),
@@ -228,6 +215,7 @@ String _joinLabel(Activity a) {
   if (a.joinedCount >= a.capacity) return 'Full';
   final u = FirebaseAuth.instance.currentUser;
   if (u != null && u.uid == a.hostUid) return 'Your activity';
+  if (u != null && a.memberIds.contains(u.uid)) return 'Joined';
   return a.isLive ? 'Join now' : 'Join';
 }
 
@@ -235,6 +223,7 @@ bool _joinEnabled(Activity a) {
   if (a.joinedCount >= a.capacity) return false;
   final u = FirebaseAuth.instance.currentUser;
   if (u != null && u.uid == a.hostUid) return false;
+  if (u != null && a.memberIds.contains(u.uid)) return false;
   return true;
 }
 

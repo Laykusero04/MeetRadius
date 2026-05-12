@@ -1,158 +1,127 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../activity/data/watch_activities.dart';
 import '../../activity/domain/activity.dart';
 import '../../feed/presentation/widgets/activity_feed_labels.dart';
 import '../data/activity_geo.dart';
 
-/// Activity pins from Firestore on a dark basemap (Davao area).
-/// Uses [flutter_map] + OSM/CARTO tiles (no Mapbox/Google API keys).
-class ActivityMapScreen extends StatefulWidget {
+/// Map pins from Firestore `activities` (see [watchActivities]).
+class ActivityMapScreen extends StatelessWidget {
   const ActivityMapScreen({super.key});
-
-  @override
-  State<ActivityMapScreen> createState() => _ActivityMapScreenState();
-}
-
-class _ActivityMapScreenState extends State<ActivityMapScreen> {
-  static final _activitiesQuery = FirebaseFirestore.instance
-      .collection('activities')
-      .orderBy('createdAt', descending: true)
-      .limit(50);
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _activitiesQuery.snapshots(),
-      builder: (context, snapshot) {
-        final activities = snapshot.hasData
-            ? snapshot.data!.docs.map(Activity.fromDoc).toList()
-            : <Activity>[];
+    return StreamBuilder<List<Activity>>(
+      stream: watchActivities(),
+      builder: (context, snap) {
+        final activities = snap.data ?? const <Activity>[];
         final liveCount = activities.where((a) => a.isLive).length;
 
         return Stack(
+      children: [
+        FlutterMap(
+          options: MapOptions(
+            initialCenter: ActivityGeo.davaoAreaCenter,
+            initialZoom: 11.4,
+            minZoom: 9,
+            maxZoom: 18,
+            backgroundColor: AppColors.scaffold,
+          ),
           children: [
-            FlutterMap(
-              options: MapOptions(
-                initialCenter: ActivityGeo.davaoAreaCenter,
-                initialZoom: 11.4,
-                minZoom: 9,
-                maxZoom: 18,
-                backgroundColor: AppColors.scaffold,
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate:
-                      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                  subdomains: const ['a', 'b', 'c', 'd'],
-                  userAgentPackageName: 'com.example.meet_radius',
-                ),
-                MarkerLayer(
-                  markers: [
-                    for (final a in activities)
-                      Marker(
-                        width: 44,
-                        height: 44,
-                        point: _pinPoint(a),
-                        child: _ActivityPinButton(
-                          live: a.isLive,
-                          icon: _categoryIcon(a.category),
-                          onTap: () => _showActivitySheet(context, a),
-                        ),
-                      ),
-                  ],
-                ),
-                SimpleAttributionWidget(
-                  alignment: Alignment.bottomRight,
-                  backgroundColor: AppColors.navBar.withValues(alpha: 0.92),
-                  source: Text(
-                    'OpenStreetMap contributors, CARTO',
-                    style: textTheme.labelSmall?.copyWith(
-                      color: AppColors.textSecondary,
-                      decoration: TextDecoration.underline,
+            TileLayer(
+              urlTemplate:
+                  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+              subdomains: const ['a', 'b', 'c', 'd'],
+              userAgentPackageName: 'com.example.meet_radius',
+            ),
+            MarkerLayer(
+              markers: [
+                for (final a in activities)
+                  Marker(
+                    width: 44,
+                    height: 44,
+                    point: _pinPoint(a),
+                    child: _ActivityPinButton(
+                      live: a.isLive,
+                      icon: _categoryIcon(a.category),
+                      onTap: () => _showActivitySheet(context, a),
                     ),
                   ),
-                ),
               ],
             ),
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Davao City · 15 mi',
-                          style: textTheme.titleSmall?.copyWith(
+            SimpleAttributionWidget(
+              alignment: Alignment.bottomRight,
+              backgroundColor: AppColors.navBar.withValues(alpha: 0.92),
+              source: Text(
+                'OpenStreetMap contributors, CARTO',
+                style: textTheme.labelSmall?.copyWith(
+                  color: AppColors.textSecondary,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Davao City · 15 mi',
+                      style: textTheme.titleSmall?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.chipBorder),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.bolt,
+                          size: 16,
+                          color: AppColors.liveAccent,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$liveCount live',
+                          style: textTheme.labelMedium?.copyWith(
                             color: AppColors.textPrimary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.chipBorder),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.bolt,
-                              size: 16,
-                              color: AppColors.liveAccent,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '$liveCount live',
-                              style: textTheme.labelMedium?.copyWith(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (snapshot.hasError)
-              Positioned.fill(
-                child: Material(
-                  color: AppColors.scaffold.withValues(alpha: 0.85),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Could not load map data.\n${snapshot.error}',
-                        textAlign: TextAlign.center,
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+                      ],
                     ),
                   ),
-                ),
+                ],
               ),
-          ],
-        );
+            ),
+          ),
+        ),
+      ],
+    );
       },
     );
   }
@@ -174,7 +143,7 @@ class _ActivityMapScreenState extends State<ActivityMapScreen> {
     };
   }
 
-  void _showActivitySheet(BuildContext context, Activity a) {
+  static void _showActivitySheet(BuildContext context, Activity a) {
     final textTheme = Theme.of(context).textTheme;
     final now = DateTime.now();
     final subtitle = a.isLive

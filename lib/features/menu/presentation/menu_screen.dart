@@ -1,7 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/simple_menu_page.dart';
+import '../../profile/data/watch_current_user_profile.dart';
+import '../../profile/domain/user_profile.dart';
 import '../../profile/presentation/profile_screen.dart';
 
 /// More tab: account shortcuts (profile, settings, support, sign out).
@@ -15,51 +18,63 @@ class MenuScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.cardBorderSubtle),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: AppColors.avatarPurple,
-                child: Text(
-                  'M',
-                  style: textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+        StreamBuilder<UserProfile?>(
+          stream: watchCurrentUserProfile(),
+          builder: (context, snap) {
+            final profile = snap.data;
+            final initials = profile?.initials ?? '…';
+            final name = profile?.displayName ?? 'Loading…';
+            final email = profile?.email ?? '';
+
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.cardBorderSubtle),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Matt',
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: AppColors.avatarPurple,
+                    child: Text(
+                      initials,
                       style: textTheme.titleMedium?.copyWith(
-                        color: AppColors.textPrimary,
+                        color: Colors.white,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'matt@meetradius.app',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: AppColors.textMuted,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: textTheme.titleMedium?.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        if (email.isNotEmpty)
+                          Text(
+                            email,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
         const SizedBox(height: 12),
         _MenuTile(
@@ -150,6 +165,8 @@ class MenuScreen extends StatelessWidget {
           label: 'Log out',
           destructive: true,
           onTap: () {
+            final nav = Navigator.of(context);
+            final shellContext = context;
             showDialog<void>(
               context: context,
               builder: (ctx) => AlertDialog(
@@ -161,7 +178,7 @@ class MenuScreen extends StatelessWidget {
                   ),
                 ),
                 content: Text(
-                  'Auth is not wired yet — this is a static demo.',
+                  'You will need to sign in again to use your account.',
                   style: textTheme.bodyMedium?.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -172,13 +189,18 @@ class MenuScreen extends StatelessWidget {
                     child: const Text('Cancel'),
                   ),
                   FilledButton(
-                    onPressed: () => Navigator.pop(ctx),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await FirebaseAuth.instance.signOut();
+                      if (!shellContext.mounted) return;
+                      nav.popUntil((route) => route.isFirst);
+                    },
                     style: FilledButton.styleFrom(
                       backgroundColor:
                           AppColors.liveDot.withValues(alpha: 0.85),
                       foregroundColor: AppColors.textPrimary,
                     ),
-                    child: const Text('OK'),
+                    child: const Text('Log out'),
                   ),
                 ],
               ),

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../data/create_activity.dart';
 
-/// Host flow: create an activity in Firestore (`activities` collection).
+/// Host flow: posts an activity to Firestore (`activities` collection).
 class HostActivityScreen extends StatefulWidget {
   const HostActivityScreen({super.key});
 
@@ -157,19 +157,6 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Host',
-            style: textTheme.headlineSmall?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Create an activity nearby. Others see it on the feed and can join.',
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 24),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -293,7 +280,9 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
                     color: AppColors.streakCalloutBg.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: AppColors.streakCalloutBorder.withValues(alpha: 0.5),
+                      color: AppColors.streakCalloutBorder.withValues(
+                        alpha: 0.5,
+                      ),
                     ),
                   ),
                   child: Row(
@@ -445,10 +434,7 @@ class _StaticPickerRow extends StatelessWidget {
                   ),
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
-                color: AppColors.textMuted,
-              ),
+              const Icon(Icons.chevron_right, color: AppColors.textMuted),
             ],
           ),
         ),

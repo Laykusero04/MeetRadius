@@ -1,64 +1,63 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../activity/domain/activity.dart';
 import '../data/send_activity_message.dart';
+import '../data/watch_activity_messages.dart';
+import '../domain/chat_message.dart';
+import 'chat_time_labels.dart';
 
 /// Group chat for one activity (`activities/{id}/messages`).
 class ActivityChatThreadScreen extends StatefulWidget {
   const ActivityChatThreadScreen({
     super.key,
-    required this.activity,
-    required this.onBack,
+    required this.activityId,
+    required this.activityTitle,
   });
 
-  final Activity activity;
-  final VoidCallback onBack;
+  final String activityId;
+  final String activityTitle;
 
   @override
   State<ActivityChatThreadScreen> createState() => _ActivityChatThreadScreenState();
 }
 
 class _ActivityChatThreadScreenState extends State<ActivityChatThreadScreen> {
-  final _input = TextEditingController();
+  final _textCtrl = TextEditingController();
+  final _scroll = ScrollController();
   bool _sending = false;
 
   @override
   void dispose() {
-    _input.dispose();
+    _textCtrl.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  String _metaLine() {
-    final a = widget.activity;
-    if (a.isLive) return 'Live · ${a.joinedCount} going';
-    return '${_weekdayTime(a.startsAt)} · ${a.joinedCount} going';
-  }
-
-  static String _weekdayTime(DateTime d) {
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final wd = weekdays[d.weekday - 1];
-    final h24 = d.hour;
-    final hour = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
-    final min = d.minute.toString().padLeft(2, '0');
-    final ampm = h24 >= 12 ? 'pm' : 'am';
-    return '$wd · $hour:$min $ampm';
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   Future<void> _send() async {
-    final raw = _input.text;
-    if (raw.trim().isEmpty || _sending) return;
+    final text = _textCtrl.text;
+    if (text.trim().isEmpty || _sending) return;
     setState(() => _sending = true);
-    final messenger = ScaffoldMessenger.maybeOf(context);
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await sendActivityMessage(activityId: widget.activity.id, text: raw);
+      await sendActivityMessage(activityId: widget.activityId, text: text);
       if (!mounted) return;
-      _input.clear();
+      _textCtrl.clear();
+      _scrollToEnd();
     } catch (e) {
       if (!mounted) return;
-      messenger?.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text('Could not send: $e')));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -69,234 +68,209 @@ class _ActivityChatThreadScreenState extends State<ActivityChatThreadScreen> {
     final textTheme = Theme.of(context).textTheme;
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    final messagesQuery = FirebaseFirestore.instance
-        .collection('activities')
-        .doc(widget.activity.id)
-        .collection('messages')
-        .orderBy('createdAt', descending: false)
-        .limit(100);
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: widget.onBack,
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                color: AppColors.textPrimary,
-                tooltip: 'Back',
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.activity.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.titleMedium?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700,
+    return Scaffold(
+      backgroundColor: AppColors.scaffold,
+      appBar: AppBar(
+        title: Text(
+          widget.activityTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        backgroundColor: AppColors.scaffold,
+        foregroundColor: AppColors.textPrimary,
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<List<ChatMessage>>(
+              stream: watchActivityMessages(widget.activityId),
+              builder: (context, snap) {
+                if (snap.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'Could not load messages.\n${snap.error}',
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                    Text(
-                      _metaLine(),
-                      style: textTheme.labelMedium?.copyWith(
-                        color: AppColors.textSecondary,
+                  );
+                }
+                final messages = snap.data ?? const <ChatMessage>[];
+                if (snap.connectionState == ConnectionState.waiting &&
+                    messages.isEmpty) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+                if (messages.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No messages yet.\nSay hi to the group.',
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textMuted,
+                        height: 1.4,
                       ),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+                final now = DateTime.now();
+                return ListView.builder(
+                  controller: _scroll,
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  itemCount: messages.length,
+                  itemBuilder: (context, i) {
+                    final m = messages[i];
+                    final mine = uid != null && m.senderUid == uid;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Align(
+                        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.sizeOf(context).width * 0.82,
+                          ),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: mine ? AppColors.joinLive : AppColors.card,
+                              borderRadius: BorderRadius.only(
+                                topLeft: const Radius.circular(16),
+                                topRight: const Radius.circular(16),
+                                bottomLeft: Radius.circular(mine ? 16 : 4),
+                                bottomRight: Radius.circular(mine ? 4 : 16),
+                              ),
+                              border: Border.all(
+                                color: mine
+                                    ? AppColors.joinLive.withValues(alpha: 0.4)
+                                    : AppColors.cardBorderSubtle,
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (!mine)
+                                    Text(
+                                      m.senderDisplayName,
+                                      style: textTheme.labelMedium?.copyWith(
+                                        color: AppColors.liveAccent,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  if (!mine) const SizedBox(height: 4),
+                                  Text(
+                                    m.text,
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      color: mine
+                                          ? AppColors.joinLiveForeground
+                                          : AppColors.textPrimary,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    shortRelativeChatTime(m.createdAt, now),
+                                    style: textTheme.labelSmall?.copyWith(
+                                      color: mine
+                                          ? AppColors.joinLiveForeground.withValues(
+                                              alpha: 0.75,
+                                            )
+                                          : AppColors.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Material(
+            color: AppColors.card,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _textCtrl,
+                        minLines: 1,
+                        maxLines: 5,
+                        textCapitalization: TextCapitalization.sentences,
+                        style: textTheme.bodyLarge?.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Message the group…',
+                          hintStyle: const TextStyle(color: AppColors.textMuted),
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: const BorderSide(color: AppColors.chipBorder),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: const BorderSide(color: AppColors.chipBorder),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: const BorderSide(
+                              color: AppColors.liveAccent,
+                              width: 1.5,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        onSubmitted: (_) => _send(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed: _sending ? null : _send,
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppColors.joinLive,
+                        foregroundColor: AppColors.joinLiveForeground,
+                      ),
+                      icon: _sending
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.joinLiveForeground,
+                              ),
+                            )
+                          : const Icon(Icons.send_rounded),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: messagesQuery.snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'Could not load messages.\n${snapshot.error}',
-                      textAlign: TextAlign.center,
-                      style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-                    ),
-                  ),
-                );
-              }
-              if (!snapshot.hasData) {
-                return const Center(
-                  child: CircularProgressIndicator(color: AppColors.liveAccent),
-                );
-              }
-              final docs = snapshot.data!.docs;
-              if (docs.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No messages yet.\nSay hi to the group.',
-                    textAlign: TextAlign.center,
-                    style: textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-                  ),
-                );
-              }
-              return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                itemCount: docs.length,
-                itemBuilder: (context, i) {
-                  final doc = docs[i];
-                  final d = doc.data();
-                  final text = d['text'] as String? ?? '';
-                  final senderUid = d['senderUid'] as String? ?? '';
-                  final senderLabel = d['senderLabel'] as String? ?? 'Member';
-                  final mine = uid != null && senderUid == uid;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _MessageBubble(
-                      text: text,
-                      incoming: !mine,
-                      sender: mine ? null : senderLabel,
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _send(),
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Message the group…',
-                      hintStyle: const TextStyle(color: AppColors.textMuted),
-                      filled: true,
-                      fillColor: AppColors.card,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(22),
-                        borderSide: const BorderSide(color: AppColors.chipBorder),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(22),
-                        borderSide: const BorderSide(color: AppColors.chipBorder),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(22),
-                        borderSide: const BorderSide(
-                          color: AppColors.liveAccent,
-                          width: 1.5,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: _sending ? null : _send,
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.joinLive,
-                    foregroundColor: AppColors.joinLiveForeground,
-                  ),
-                  icon: _sending
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.joinLiveForeground,
-                          ),
-                        )
-                      : const Icon(Icons.send_rounded),
-                ),
-              ],
             ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
-    required this.text,
-    required this.incoming,
-    this.sender,
-  });
-
-  final String text;
-  final bool incoming;
-  final String? sender;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final align = incoming ? CrossAxisAlignment.start : CrossAxisAlignment.end;
-    final bg = incoming ? AppColors.card : AppColors.avatarPurple.withValues(alpha: 0.35);
-    final border = incoming
-        ? Border.all(color: AppColors.cardBorderSubtle)
-        : Border.all(color: AppColors.avatarPurple.withValues(alpha: 0.45));
-
-    return Column(
-      crossAxisAlignment: align,
-      children: [
-        if (incoming && sender != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 4),
-            child: Text(
-              sender!,
-              style: textTheme.labelSmall?.copyWith(color: AppColors.textMuted),
-            ),
-          ),
-        Container(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: incoming
-                ? const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                    bottomLeft: Radius.circular(4),
-                  )
-                : const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                    bottomRight: Radius.circular(4),
-                    bottomLeft: Radius.circular(16),
-                  ),
-            border: border,
-          ),
-          child: Text(
-            text,
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.textPrimary),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

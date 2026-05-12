@@ -2,7 +2,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../feed/presentation/home_feed_screen.dart';
 import '../data/register_user.dart';
 
 /// Registration UI; wire to Firebase Auth when ready.
@@ -37,6 +36,8 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -46,6 +47,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -61,19 +64,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await registerUserWithProfile(
         email: _emailController.text,
         password: _passwordController.text,
+        firstName: _firstNameController.text,
+        lastName: _lastNameController.text,
       );
       if (!mounted) return;
-      nav.pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const HomeFeedScreen()),
-        (_) => false,
-      );
+      nav.popUntil((route) => route.isFirst);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text(messageForAuthException(e))));
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not save profile: $e')),
+        SnackBar(
+          content: Text(
+            'Profile save failed — check Firestore rules for the `users` collection '
+            '(signed-in user must be allowed to create their document). $e',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -113,6 +120,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 28),
+                TextFormField(
+                  controller: _firstNameController,
+                  textCapitalization: TextCapitalization.words,
+                  autofillHints: const [AutofillHints.givenName],
+                  decoration: RegisterScreen.fieldDecoration('First name'),
+                  validator: (value) {
+                    if ((value?.trim() ?? '').isEmpty) return 'Enter your first name';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _lastNameController,
+                  textCapitalization: TextCapitalization.words,
+                  autofillHints: const [AutofillHints.familyName],
+                  decoration: RegisterScreen.fieldDecoration('Last name'),
+                  validator: (value) {
+                    if ((value?.trim() ?? '').isEmpty) return 'Enter your last name';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,

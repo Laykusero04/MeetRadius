@@ -1,16 +1,13 @@
-import 'dart:async';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../activity/domain/activity.dart';
-import '../../feed/presentation/widgets/activity_feed_labels.dart';
+import '../data/watch_my_chat_threads.dart';
 import 'activity_chat_thread_screen.dart';
 import 'chat_time_labels.dart';
 
-/// Activity-scoped chats: threads from Firestore for activities you host or joined.
+/// Lists activity group threads the signed-in user belongs to (Firestore `memberIds`).
 class ChatsHubScreen extends StatelessWidget {
   const ChatsHubScreen({super.key});
 
@@ -23,7 +20,7 @@ class ChatsHubScreen extends StatelessWidget {
         if (user == null) {
           return const _SignedOutChats();
         }
-        return _ChatsContent(uid: user.uid);
+        return const _ChatsThreadList();
       },
     );
   }
@@ -58,94 +55,12 @@ class _SignedOutChats extends StatelessWidget {
   }
 }
 
-class _ChatsContent extends StatefulWidget {
-  const _ChatsContent({required this.uid});
-
-  final String uid;
-
-  @override
-  State<_ChatsContent> createState() => _ChatsContentState();
-}
-
-class _ChatsContentState extends State<_ChatsContent> {
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _participantSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _hostSub;
-  QuerySnapshot<Map<String, dynamic>>? _participantSnap;
-  QuerySnapshot<Map<String, dynamic>>? _hostSnap;
-  Activity? _openActivity;
-
-  @override
-  void initState() {
-    super.initState();
-    _attachStreams(widget.uid);
-  }
-
-  @override
-  void didUpdateWidget(covariant _ChatsContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.uid != widget.uid) {
-      _attachStreams(widget.uid);
-    }
-  }
-
-  void _attachStreams(String uid) {
-    _participantSub?.cancel();
-    _hostSub?.cancel();
-    _participantSub = FirebaseFirestore.instance
-        .collection('activities')
-        .where('participantIds', arrayContains: uid)
-        .snapshots()
-        .listen((s) {
-      if (mounted) setState(() => _participantSnap = s);
-    });
-    _hostSub = FirebaseFirestore.instance
-        .collection('activities')
-        .where('hostUid', isEqualTo: uid)
-        .snapshots()
-        .listen((s) {
-      if (mounted) setState(() => _hostSnap = s);
-    });
-  }
-
-  @override
-  void dispose() {
-    _participantSub?.cancel();
-    _hostSub?.cancel();
-    super.dispose();
-  }
-
-  List<Activity> _mergedActivities() {
-    final map = <String, Activity>{};
-    for (final d in _participantSnap?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
-      map[d.id] = Activity.fromDoc(d);
-    }
-    for (final d in _hostSnap?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
-      map[d.id] = Activity.fromDoc(d);
-    }
-    final list = map.values.toList();
-    list.sort((a, b) {
-      final ta = a.lastMessageAt ?? a.startsAt;
-      final tb = b.lastMessageAt ?? b.startsAt;
-      return tb.compareTo(ta);
-    });
-    return list;
-  }
-
-  String _metaLine(Activity a) {
-    if (a.isLive) return 'Live · ${a.joinedCount} going';
-    return '${activitySchedulePill(a.startsAt)} · ${a.joinedCount} going';
-  }
+class _ChatsThreadList extends StatelessWidget {
+  const _ChatsThreadList();
 
   @override
   Widget build(BuildContext context) {
-    if (_openActivity != null) {
-      return ActivityChatThreadScreen(
-        activity: _openActivity!,
-        onBack: () => setState(() => _openActivity = null),
-      );
-    }
-
-    final threads = _mergedActivities();
+    final textTheme = Theme.of(context).textTheme;
     final now = DateTime.now();
 
     return Column(
@@ -155,124 +70,157 @@ class _ChatsContentState extends State<_ChatsContent> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Text(
             'Chats',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
+            style: textTheme.headlineSmall?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Text(
-            'Activities you host or join. Coordinate time and place here.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            'One thread per activity you’re in. Messages sync with Firestore.',
+            style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
           ),
         ),
         Expanded(
-          child: threads.isEmpty
-              ? Center(
+          child: StreamBuilder<List<Activity>>(
+            stream: watchMyChatThreads(),
+            builder: (context, snap) {
+              if (snap.hasError) {
+                return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      'No chats yet.\nHost an activity or join one from the Feed tab.',
+                      'Could not load chats.\n${snap.error}',
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textMuted,
-                          ),
                     ),
                   ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  itemCount: threads.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) {
-                    final a = threads[i];
-                    final preview = a.lastMessagePreview ?? 'No messages yet';
-                    final timeLabel = a.lastMessageAt != null
-                        ? shortRelativeChatTime(a.lastMessageAt!, now)
-                        : '';
-
-                    return Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => setState(() => _openActivity = a),
-                        borderRadius: BorderRadius.circular(16),
-                        child: Ink(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.cardBorderSubtle),
+                );
+              }
+              if (snap.connectionState == ConnectionState.waiting &&
+                  (snap.data == null || snap.data!.isEmpty)) {
+                return const Center(
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              final threads = snap.data ?? const <Activity>[];
+              if (threads.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'No chats yet.\nHost or join an activity — each has a group thread.',
+                      textAlign: TextAlign.center,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textMuted,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                itemCount: threads.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, i) {
+                  final a = threads[i];
+                  final preview = (a.lastMessagePreview?.trim().isNotEmpty == true)
+                      ? a.lastMessagePreview!.trim()
+                      : 'Tap to open chat · ${a.spot}';
+                  final time = a.lastMessageAt != null
+                      ? shortRelativeChatTime(a.lastMessageAt!, now)
+                      : '';
+                  return Material(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => ActivityChatThreadScreen(
+                              activityId: a.id,
+                              activityTitle: a.title,
+                            ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.chipBorder),
+                              ),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                a.isLive ? Icons.bolt : Icons.chat_bubble_outline,
+                                color: a.isLive
+                                    ? AppColors.liveAccent
+                                    : AppColors.textMuted,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surface,
-                                      borderRadius: BorderRadius.circular(12),
+                                  Text(
+                                    a.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: textTheme.titleSmall?.copyWith(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w700,
                                     ),
-                                    child: const Icon(
-                                      Icons.forum_outlined,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    preview,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: textTheme.bodySmall?.copyWith(
                                       color: AppColors.textSecondary,
+                                      height: 1.3,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          a.title,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                                color: AppColors.textPrimary,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _metaLine(a),
-                                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                                color: AppColors.liveAccent,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (timeLabel.isNotEmpty)
-                                    Text(
-                                      timeLabel,
-                                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                            color: AppColors.textMuted,
-                                          ),
-                                    ),
                                 ],
                               ),
-                              const SizedBox(height: 10),
+                            ),
+                            if (time.isNotEmpty)
                               Text(
-                                preview,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
+                                time,
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: AppColors.textMuted,
+                                ),
                               ),
-                            ],
-                          ),
+                          ],
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ),
       ],
     );
