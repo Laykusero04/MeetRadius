@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_theme.dart';
-import 'features/feed/presentation/home_feed_screen.dart';
+import 'features/auth/presentation/login_screen.dart';
+import 'features/auth/presentation/register_screen.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -12,7 +13,11 @@ class MyApp extends StatelessWidget {
       title: 'MeetRadius',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
-      home: const HomeFeedScreen(),
+      home: const LoginScreen(),
+      routes: {
+        '/login': (_) => const LoginScreen(),
+        '/register': (_) => const RegisterScreen(),
+      },
     );
   }
 }

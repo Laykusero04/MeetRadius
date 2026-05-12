@@ -1,8 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../data/create_activity.dart';
 
-/// Static host flow — wire to backend / pickers later.
+/// Host flow: create an activity in Firestore (`activities` collection).
 class HostActivityScreen extends StatefulWidget {
   const HostActivityScreen({super.key});
 
@@ -16,8 +18,10 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
   int _typeIndex = 0;
   int _capacity = 6;
   bool _goLive = true;
+  late DateTime _startsAt;
+  bool _posting = false;
 
-  static const _types = [
+  static const _types = <(String label, IconData icon)>[
     ('Sports', Icons.sports_basketball_outlined),
     ('Coffee', Icons.local_cafe_outlined),
     ('Social', Icons.groups_2_outlined),
@@ -26,10 +30,122 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    var candidate = DateTime(now.year, now.month, now.day, 18, 30);
+    if (!candidate.isAfter(now)) {
+      candidate = now.add(const Duration(hours: 1));
+    }
+    _startsAt = candidate;
+  }
+
+  @override
   void dispose() {
     _titleCtrl.dispose();
     _spotCtrl.dispose();
     super.dispose();
+  }
+
+  String _startsPickerLabel() {
+    final d = _startsAt;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dDay = DateTime(d.year, d.month, d.day);
+    final diff = dDay.difference(today).inDays;
+    final dayPart = switch (diff) {
+      0 => 'Today',
+      1 => 'Tomorrow',
+      _ => '${d.month}/${d.day}/${d.year}',
+    };
+    final h24 = d.hour;
+    final hour = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
+    final min = d.minute.toString().padLeft(2, '0');
+    final ampm = h24 >= 12 ? 'PM' : 'AM';
+    return '$dayPart · $hour:$min $ampm';
+  }
+
+  Future<void> _pickStarts() async {
+    final now = DateTime.now();
+    final first = DateTime(now.year, now.month, now.day);
+    final last = first.add(const Duration(days: 365));
+    var initialDate = DateTime(_startsAt.year, _startsAt.month, _startsAt.day);
+    if (initialDate.isBefore(first)) initialDate = first;
+    if (initialDate.isAfter(last)) initialDate = last;
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: first,
+      lastDate: last,
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_startsAt),
+    );
+    if (pickedTime == null || !mounted) return;
+
+    setState(() {
+      _startsAt = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
+  }
+
+  Future<void> _postActivity() async {
+    final title = _titleCtrl.text.trim();
+    final spot = _spotCtrl.text.trim();
+    if (title.isEmpty || spot.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add a title and meeting spot.')),
+      );
+      return;
+    }
+    if (!_startsAt.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a start time in the future.')),
+      );
+      return;
+    }
+    if (FirebaseAuth.instance.currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in to post an activity.')),
+      );
+      return;
+    }
+
+    setState(() => _posting = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await createActivity(
+        title: title,
+        spot: spot,
+        category: _types[_typeIndex].$1,
+        capacity: _capacity,
+        isLive: _goLive,
+        startsAt: _startsAt,
+      );
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Activity posted — check the Feed tab.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),
+      );
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
   }
 
   @override
@@ -136,8 +252,8 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
                 const SizedBox(height: 8),
                 _StaticPickerRow(
                   icon: Icons.schedule_outlined,
-                  label: 'Today · 6:30 PM',
-                  onTap: () {},
+                  label: _startsPickerLabel(),
+                  onTap: _pickStarts,
                 ),
                 const SizedBox(height: 20),
                 _SectionLabel(text: 'MEETING SPOT', textTheme: textTheme),
@@ -218,14 +334,7 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Static host — connect Firestore next.'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
+                    onPressed: _posting ? null : _postActivity,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.joinLive,
                       foregroundColor: AppColors.joinLiveForeground,
@@ -234,7 +343,16 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
                         borderRadius: BorderRadius.circular(24),
                       ),
                     ),
-                    child: const Text('Post activity'),
+                    child: _posting
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.joinLiveForeground,
+                            ),
+                          )
+                        : const Text('Post activity'),
                   ),
                 ),
               ],

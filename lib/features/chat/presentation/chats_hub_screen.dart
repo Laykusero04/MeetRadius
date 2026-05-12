@@ -1,81 +1,152 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../activity/domain/activity.dart';
+import '../../feed/presentation/widgets/activity_feed_labels.dart';
+import 'activity_chat_thread_screen.dart';
+import 'chat_time_labels.dart';
 
-/// Activity-scoped chats (MVP): list of joined threads + static thread UI.
-class ChatsHubScreen extends StatefulWidget {
+/// Activity-scoped chats: threads from Firestore for activities you host or joined.
+class ChatsHubScreen extends StatelessWidget {
   const ChatsHubScreen({super.key});
 
   @override
-  State<ChatsHubScreen> createState() => _ChatsHubScreenState();
-}
-
-class _ChatsHubScreenState extends State<ChatsHubScreen> {
-  static const _threads = [
-    _ThreadSummary(
-      title: 'Pickup basketball — City Gym',
-      meta: 'Live · 4 going',
-      preview: 'Alex: I’m parking now, 3 min',
-      timeLabel: '2m',
-    ),
-    _ThreadSummary(
-      title: 'Coffee meetup — NCCC Mall',
-      meta: 'Starts in 18 min',
-      preview: 'Jordan: Meet at the south entrance?',
-      timeLabel: '12m',
-    ),
-    _ThreadSummary(
-      title: 'Hiking — Mt. Apo trailhead',
-      meta: 'Saturday · 7am',
-      preview: 'You: Sounds good — see you there',
-      timeLabel: 'Yesterday',
-    ),
-  ];
-
-  int? _openIndex;
-
-  @override
   Widget build(BuildContext context) {
-    if (_openIndex != null) {
-      return _ActivityChatThread(
-        summary: _threads[_openIndex!],
-        onBack: () => setState(() => _openIndex = null),
-      );
-    }
-
-    return _ChatsList(
-      threads: _threads,
-      onOpen: (i) => setState(() => _openIndex = i),
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, authSnap) {
+        final user = authSnap.data;
+        if (user == null) {
+          return const _SignedOutChats();
+        }
+        return _ChatsContent(uid: user.uid);
+      },
     );
   }
 }
 
-class _ThreadSummary {
-  const _ThreadSummary({
-    required this.title,
-    required this.meta,
-    required this.preview,
-    required this.timeLabel,
-  });
-
-  final String title;
-  final String meta;
-  final String preview;
-  final String timeLabel;
-}
-
-class _ChatsList extends StatelessWidget {
-  const _ChatsList({
-    required this.threads,
-    required this.onOpen,
-  });
-
-  final List<_ThreadSummary> threads;
-  final ValueChanged<int> onOpen;
+class _SignedOutChats extends StatelessWidget {
+  const _SignedOutChats();
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Chats',
+            style: textTheme.headlineSmall?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Sign in to see group chats for activities you host or join.',
+            style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatsContent extends StatefulWidget {
+  const _ChatsContent({required this.uid});
+
+  final String uid;
+
+  @override
+  State<_ChatsContent> createState() => _ChatsContentState();
+}
+
+class _ChatsContentState extends State<_ChatsContent> {
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _participantSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _hostSub;
+  QuerySnapshot<Map<String, dynamic>>? _participantSnap;
+  QuerySnapshot<Map<String, dynamic>>? _hostSnap;
+  Activity? _openActivity;
+
+  @override
+  void initState() {
+    super.initState();
+    _attachStreams(widget.uid);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatsContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.uid != widget.uid) {
+      _attachStreams(widget.uid);
+    }
+  }
+
+  void _attachStreams(String uid) {
+    _participantSub?.cancel();
+    _hostSub?.cancel();
+    _participantSub = FirebaseFirestore.instance
+        .collection('activities')
+        .where('participantIds', arrayContains: uid)
+        .snapshots()
+        .listen((s) {
+      if (mounted) setState(() => _participantSnap = s);
+    });
+    _hostSub = FirebaseFirestore.instance
+        .collection('activities')
+        .where('hostUid', isEqualTo: uid)
+        .snapshots()
+        .listen((s) {
+      if (mounted) setState(() => _hostSnap = s);
+    });
+  }
+
+  @override
+  void dispose() {
+    _participantSub?.cancel();
+    _hostSub?.cancel();
+    super.dispose();
+  }
+
+  List<Activity> _mergedActivities() {
+    final map = <String, Activity>{};
+    for (final d in _participantSnap?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
+      map[d.id] = Activity.fromDoc(d);
+    }
+    for (final d in _hostSnap?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
+      map[d.id] = Activity.fromDoc(d);
+    }
+    final list = map.values.toList();
+    list.sort((a, b) {
+      final ta = a.lastMessageAt ?? a.startsAt;
+      final tb = b.lastMessageAt ?? b.startsAt;
+      return tb.compareTo(ta);
+    });
+    return list;
+  }
+
+  String _metaLine(Activity a) {
+    if (a.isLive) return 'Live · ${a.joinedCount} going';
+    return '${activitySchedulePill(a.startsAt)} · ${a.joinedCount} going';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_openActivity != null) {
+      return ActivityChatThreadScreen(
+        activity: _openActivity!,
+        onBack: () => setState(() => _openActivity = null),
+      );
+    }
+
+    final threads = _mergedActivities();
+    final now = DateTime.now();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -84,325 +155,124 @@ class _ChatsList extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Text(
             'Chats',
-            style: textTheme.headlineSmall?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w800,
-            ),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
           ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Text(
-            'Only activities you’ve joined. Keep it practical — time, place, running late.',
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            'Activities you host or join. Coordinate time and place here.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
           ),
         ),
         Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            itemCount: threads.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, i) {
-              final t = threads[i];
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => onOpen(i),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Ink(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.cardBorderSubtle),
+          child: threads.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'No chats yet.\nHost an activity or join one from the Feed tab.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.textMuted,
+                          ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.forum_outlined,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  itemCount: threads.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, i) {
+                    final a = threads[i];
+                    final preview = a.lastMessagePreview ?? 'No messages yet';
+                    final timeLabel = a.lastMessageAt != null
+                        ? shortRelativeChatTime(a.lastMessageAt!, now)
+                        : '';
+
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => setState(() => _openActivity = a),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Ink(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.cardBorderSubtle),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    t.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: textTheme.titleSmall?.copyWith(
-                                      color: AppColors.textPrimary,
-                                      fontWeight: FontWeight.w700,
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surface,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.forum_outlined,
+                                      color: AppColors.textSecondary,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    t.meta,
-                                    style: textTheme.labelMedium?.copyWith(
-                                      color: AppColors.liveAccent,
-                                      fontWeight: FontWeight.w600,
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          a.title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                                color: AppColors.textPrimary,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _metaLine(a),
+                                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                                color: AppColors.liveAccent,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                      ],
                                     ),
                                   ),
+                                  if (timeLabel.isNotEmpty)
+                                    Text(
+                                      timeLabel,
+                                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                            color: AppColors.textMuted,
+                                          ),
+                                    ),
                                 ],
                               ),
-                            ),
-                            Text(
-                              t.timeLabel,
-                              style: textTheme.labelMedium?.copyWith(
-                                color: AppColors.textMuted,
+                              const SizedBox(height: 10),
+                              Text(
+                                preview,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          t.preview,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ActivityChatThread extends StatefulWidget {
-  const _ActivityChatThread({
-    required this.summary,
-    required this.onBack,
-  });
-
-  final _ThreadSummary summary;
-  final VoidCallback onBack;
-
-  @override
-  State<_ActivityChatThread> createState() => _ActivityChatThreadState();
-}
-
-class _ActivityChatThreadState extends State<_ActivityChatThread> {
-  final _input = TextEditingController();
-
-  static const _messages = [
-    _ChatLine(text: 'Who’s already at the court?', incoming: true, sender: 'Alex'),
-    _ChatLine(text: 'I’m walking over — 5 min out', incoming: true, sender: 'Jordan'),
-    _ChatLine(text: 'Grabbing water — save me a spot', incoming: false, sender: null),
-    _ChatLine(text: 'Cool, we’re on court 2', incoming: true, sender: 'Alex'),
-  ];
-
-  @override
-  void dispose() {
-    _input.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: widget.onBack,
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                color: AppColors.textPrimary,
-                tooltip: 'Back',
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.summary.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.titleMedium?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      widget.summary.meta,
-                      style: textTheme.labelMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            itemCount: _messages.length,
-            itemBuilder: (context, i) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _MessageBubble(line: _messages[i]),
-              );
-            },
-          ),
-        ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    minLines: 1,
-                    maxLines: 4,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Message the group…',
-                      hintStyle: const TextStyle(color: AppColors.textMuted),
-                      filled: true,
-                      fillColor: AppColors.card,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(22),
-                        borderSide: const BorderSide(color: AppColors.chipBorder),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(22),
-                        borderSide: const BorderSide(color: AppColors.chipBorder),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(22),
-                        borderSide: const BorderSide(
-                          color: AppColors.liveAccent,
-                          width: 1.5,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: () {
-                    if (_input.text.trim().isEmpty) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Static chat — wire Firestore next.'),
-                        behavior: SnackBarBehavior.floating,
                       ),
                     );
-                    _input.clear();
                   },
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.joinLive,
-                    foregroundColor: AppColors.joinLiveForeground,
-                  ),
-                  icon: const Icon(Icons.send_rounded),
                 ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ChatLine {
-  const _ChatLine({
-    required this.text,
-    required this.incoming,
-    this.sender,
-  });
-
-  final String text;
-  final bool incoming;
-  final String? sender;
-}
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.line});
-
-  final _ChatLine line;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final align = line.incoming ? CrossAxisAlignment.start : CrossAxisAlignment.end;
-    final bg = line.incoming ? AppColors.card : AppColors.avatarPurple.withValues(alpha: 0.35);
-    final border = line.incoming
-        ? Border.all(color: AppColors.cardBorderSubtle)
-        : Border.all(color: AppColors.avatarPurple.withValues(alpha: 0.45));
-
-    return Column(
-      crossAxisAlignment: align,
-      children: [
-        if (line.incoming && line.sender != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 4),
-            child: Text(
-              line.sender!,
-              style: textTheme.labelSmall?.copyWith(color: AppColors.textMuted),
-            ),
-          ),
-        Container(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: line.incoming
-                ? const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                    bottomLeft: Radius.circular(4),
-                  )
-                : const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                    bottomRight: Radius.circular(4),
-                    bottomLeft: Radius.circular(16),
-                  ),
-            border: border,
-          ),
-          child: Text(
-            line.text,
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.textPrimary),
-          ),
         ),
       ],
     );

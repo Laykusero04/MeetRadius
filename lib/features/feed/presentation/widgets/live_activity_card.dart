@@ -10,8 +10,12 @@ class LiveActivityCard extends StatelessWidget {
     required this.distance,
     required this.joinedLabel,
     required this.socialLine,
+    this.category,
     this.friendInitials = const [],
     this.friendNamesLine,
+    this.onJoin,
+    this.joinButtonLabel = 'Join now',
+    this.joinEnabled = true,
   });
 
   final String title;
@@ -19,8 +23,13 @@ class LiveActivityCard extends StatelessWidget {
   final String distance;
   final String joinedLabel;
   final String socialLine;
+  /// e.g. Sports, Coffee — shown as a small pill when set.
+  final String? category;
   final List<String> friendInitials;
   final String? friendNamesLine;
+  final VoidCallback? onJoin;
+  final String joinButtonLabel;
+  final bool joinEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +48,10 @@ class LiveActivityCard extends StatelessWidget {
           Row(
             children: [
               _LiveBadge(textTheme: textTheme),
+              if (category != null && category!.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                _CategoryPill(label: category!, textTheme: textTheme),
+              ],
               const Spacer(),
               Text(
                 startsIn,
@@ -90,7 +103,7 @@ class LiveActivityCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed: () {},
+              onPressed: joinEnabled ? onJoin : null,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.joinLive,
                 foregroundColor: AppColors.joinLiveForeground,
@@ -99,10 +112,36 @@ class LiveActivityCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24),
                 ),
               ),
-              child: const Text('Join now'),
+              child: Text(joinButtonLabel),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CategoryPill extends StatelessWidget {
+  const _CategoryPill({required this.label, required this.textTheme});
+
+  final String label;
+  final TextTheme textTheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.chipBorder),
+      ),
+      child: Text(
+        label,
+        style: textTheme.labelSmall?.copyWith(
+          color: AppColors.textSecondary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

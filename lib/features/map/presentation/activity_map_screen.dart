@@ -1,148 +1,186 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../activity/domain/activity.dart';
+import '../../feed/presentation/widgets/activity_feed_labels.dart';
+import '../data/activity_geo.dart';
 
-/// Static activity pins on a dark basemap (Davao area — matches feed demo).
+/// Activity pins from Firestore on a dark basemap (Davao area).
 /// Uses [flutter_map] + OSM/CARTO tiles (no Mapbox/Google API keys).
-class ActivityMapScreen extends StatelessWidget {
+class ActivityMapScreen extends StatefulWidget {
   const ActivityMapScreen({super.key});
 
-  static final _center = LatLng(7.065, 125.595);
+  @override
+  State<ActivityMapScreen> createState() => _ActivityMapScreenState();
+}
 
-  static final _pins = <_MapPin>[
-    _MapPin(
-      point: LatLng(7.088, 125.618),
-      title: 'Pickup basketball — City Gym',
-      subtitle: 'Live · Starts in 12 min',
-      live: true,
-      icon: Icons.sports_basketball,
-    ),
-    _MapPin(
-      point: LatLng(7.081, 125.611),
-      title: 'Coffee meetup — NCCC Mall',
-      subtitle: 'Live · Starts in 20 min',
-      live: true,
-      icon: Icons.local_cafe_outlined,
-    ),
-    _MapPin(
-      point: LatLng(7.018, 125.528),
-      title: 'Hiking — Mt. Apo trailhead',
-      subtitle: 'Saturday · 7am',
-      live: false,
-      icon: Icons.terrain_outlined,
-    ),
-  ];
+class _ActivityMapScreenState extends State<ActivityMapScreen> {
+  static final _activitiesQuery = FirebaseFirestore.instance
+      .collection('activities')
+      .orderBy('createdAt', descending: true)
+      .limit(50);
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return Stack(
-      children: [
-        FlutterMap(
-          options: MapOptions(
-            initialCenter: _center,
-            initialZoom: 11.4,
-            minZoom: 9,
-            maxZoom: 18,
-            backgroundColor: AppColors.scaffold,
-          ),
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _activitiesQuery.snapshots(),
+      builder: (context, snapshot) {
+        final activities = snapshot.hasData
+            ? snapshot.data!.docs.map(Activity.fromDoc).toList()
+            : <Activity>[];
+        final liveCount = activities.where((a) => a.isLive).length;
+
+        return Stack(
           children: [
-            TileLayer(
-              urlTemplate:
-                  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-              subdomains: const ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'com.example.meet_radius',
-            ),
-            MarkerLayer(
-              markers: [
-                for (final pin in _pins)
-                  Marker(
-                    width: 44,
-                    height: 44,
-                    point: pin.point,
-                    child: _ActivityPinButton(
-                      live: pin.live,
-                      icon: pin.icon,
-                      onTap: () => _showPinSheet(context, pin),
+            FlutterMap(
+              options: MapOptions(
+                initialCenter: ActivityGeo.davaoAreaCenter,
+                initialZoom: 11.4,
+                minZoom: 9,
+                maxZoom: 18,
+                backgroundColor: AppColors.scaffold,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate:
+                      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                  subdomains: const ['a', 'b', 'c', 'd'],
+                  userAgentPackageName: 'com.example.meet_radius',
+                ),
+                MarkerLayer(
+                  markers: [
+                    for (final a in activities)
+                      Marker(
+                        width: 44,
+                        height: 44,
+                        point: _pinPoint(a),
+                        child: _ActivityPinButton(
+                          live: a.isLive,
+                          icon: _categoryIcon(a.category),
+                          onTap: () => _showActivitySheet(context, a),
+                        ),
+                      ),
+                  ],
+                ),
+                SimpleAttributionWidget(
+                  alignment: Alignment.bottomRight,
+                  backgroundColor: AppColors.navBar.withValues(alpha: 0.92),
+                  source: Text(
+                    'OpenStreetMap contributors, CARTO',
+                    style: textTheme.labelSmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      decoration: TextDecoration.underline,
                     ),
                   ),
+                ),
               ],
             ),
-            SimpleAttributionWidget(
-              alignment: Alignment.bottomRight,
-              backgroundColor: AppColors.navBar.withValues(alpha: 0.92),
-              source: Text(
-                'OpenStreetMap contributors, CARTO',
-                style: textTheme.labelSmall?.copyWith(
-                  color: AppColors.textSecondary,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
-          ],
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Davao City · 15 mi',
-                      style: textTheme.titleSmall?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.chipBorder),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.bolt,
-                          size: 16,
-                          color: AppColors.liveAccent,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${_pins.where((p) => p.live).length} live',
-                          style: textTheme.labelMedium?.copyWith(
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Davao City · 15 mi',
+                          style: textTheme.titleSmall?.copyWith(
                             color: AppColors.textPrimary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.card,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.chipBorder),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.bolt,
+                              size: 16,
+                              color: AppColors.liveAccent,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$liveCount live',
+                              style: textTheme.labelMedium?.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+            if (snapshot.hasError)
+              Positioned.fill(
+                child: Material(
+                  color: AppColors.scaffold.withValues(alpha: 0.85),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'Could not load map data.\n${snapshot.error}',
+                        textAlign: TextAlign.center,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
-  void _showPinSheet(BuildContext context, _MapPin pin) {
+  static LatLng _pinPoint(Activity a) {
+    if (a.latitude != null && a.longitude != null) {
+      return LatLng(a.latitude!, a.longitude!);
+    }
+    return ActivityGeo.jitterFromActivityId(a.id);
+  }
+
+  static IconData _categoryIcon(String category) {
+    return switch (category) {
+      'Sports' => Icons.sports_basketball,
+      'Coffee' => Icons.local_cafe_outlined,
+      'Social' => Icons.groups_2_outlined,
+      'Outdoor' => Icons.terrain_outlined,
+      _ => Icons.place_outlined,
+    };
+  }
+
+  void _showActivitySheet(BuildContext context, Activity a) {
     final textTheme = Theme.of(context).textTheme;
+    final now = DateTime.now();
+    final subtitle = a.isLive
+        ? 'Live · ${activityStartsInLine(a.startsAt, now)}'
+        : '${activitySchedulePill(a.startsAt)} · ${activityStartsInLine(a.startsAt, now)}';
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.card,
@@ -167,7 +205,7 @@ class ActivityMapScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              if (pin.live) ...[
+              if (a.isLive) ...[
                 Row(
                   children: [
                     Container(
@@ -192,7 +230,7 @@ class ActivityMapScreen extends StatelessWidget {
                 const SizedBox(height: 8),
               ],
               Text(
-                pin.title,
+                a.title,
                 style: textTheme.titleMedium?.copyWith(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
@@ -200,8 +238,31 @@ class ActivityMapScreen extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                pin.subtitle,
+                subtitle,
                 style: textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.place_outlined, size: 18, color: AppColors.textMuted),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      a.spot.isEmpty ? 'Nearby' : a.spot,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${a.joinedCount} of ${a.capacity} going · ${a.category}',
+                style: textTheme.labelMedium?.copyWith(
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -218,7 +279,7 @@ class ActivityMapScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(24),
                     ),
                   ),
-                  child: const Text('View on feed (static)'),
+                  child: const Text('Close'),
                 ),
               ),
             ],
@@ -227,22 +288,6 @@ class ActivityMapScreen extends StatelessWidget {
       },
     );
   }
-}
-
-class _MapPin {
-  const _MapPin({
-    required this.point,
-    required this.title,
-    required this.subtitle,
-    required this.live,
-    required this.icon,
-  });
-
-  final LatLng point;
-  final String title;
-  final String subtitle;
-  final bool live;
-  final IconData icon;
 }
 
 class _ActivityPinButton extends StatelessWidget {

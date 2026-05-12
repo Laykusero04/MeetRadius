@@ -10,6 +10,10 @@ class UpcomingActivityCard extends StatelessWidget {
     required this.distance,
     required this.goingLabel,
     required this.friendsLine,
+    this.category,
+    this.onJoin,
+    this.joinButtonLabel = 'Join',
+    this.joinEnabled = true,
   });
 
   final String schedulePill;
@@ -17,6 +21,10 @@ class UpcomingActivityCard extends StatelessWidget {
   final String distance;
   final String goingLabel;
   final String friendsLine;
+  final String? category;
+  final VoidCallback? onJoin;
+  final String joinButtonLabel;
+  final bool joinEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -32,22 +40,47 @@ class UpcomingActivityCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.upcomingBlue.withValues(alpha: 0.22),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: AppColors.upcomingBlue.withValues(alpha: 0.45),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.upcomingBlue.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppColors.upcomingBlue.withValues(alpha: 0.45),
+                    ),
+                  ),
+                  child: Text(
+                    schedulePill,
+                    style: textTheme.labelMedium?.copyWith(
+                      color: AppColors.upcomingBlue,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
-            ),
-            child: Text(
-              schedulePill,
-              style: textTheme.labelMedium?.copyWith(
-                color: AppColors.upcomingBlue,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+              if (category != null && category!.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.chipBorder),
+                  ),
+                  child: Text(
+                    category!,
+                    style: textTheme.labelSmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 12),
           Text(
@@ -88,7 +121,7 @@ class UpcomingActivityCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () {},
+              onPressed: joinEnabled ? onJoin : null,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.joinUpcomingForeground,
                 side: const BorderSide(color: AppColors.chipBorder),
@@ -98,7 +131,7 @@ class UpcomingActivityCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24),
                 ),
               ),
-              child: const Text('Join'),
+              child: Text(joinButtonLabel),
             ),
           ),
         ],
