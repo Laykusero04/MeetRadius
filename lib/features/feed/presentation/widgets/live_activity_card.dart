@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/meet_radius_palette.dart';
+import '../../../../shared/widgets/brand_gradient.dart';
+import 'messenger_style_leave_row.dart';
 
 class LiveActivityCard extends StatelessWidget {
   const LiveActivityCard({
@@ -16,6 +18,10 @@ class LiveActivityCard extends StatelessWidget {
     this.onJoin,
     this.joinButtonLabel = 'Join now',
     this.joinEnabled = true,
+    this.isOwnActivity = false,
+    this.isLeaveAction = false,
+    this.onManageOwn,
+    this.onTapActivity,
   });
 
   final String title;
@@ -30,91 +36,160 @@ class LiveActivityCard extends StatelessWidget {
   final VoidCallback? onJoin;
   final String joinButtonLabel;
   final bool joinEnabled;
+  final bool isOwnActivity;
+  final bool isLeaveAction;
+  final VoidCallback? onManageOwn;
+  /// Opens full activity details (host, members, schedule).
+  final VoidCallback? onTapActivity;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.liveBorder, width: 1),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    final headerAndBody = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _LiveBadge(textTheme: textTheme),
+            if (category != null && category!.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              _CategoryPill(label: category!, textTheme: textTheme),
+            ],
+            const Spacer(),
+            if (isOwnActivity && onManageOwn != null) ...[
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                tooltip: 'Edit or delete',
+                icon: Icon(
+                  Icons.more_vert,
+                  color: context.palette.textMuted,
+                  size: 22,
+                ),
+                onPressed: onManageOwn,
+              ),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              startsIn,
+              style: textTheme.labelMedium?.copyWith(
+                color: context.palette.liveAccent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          title,
+          style: textTheme.titleSmall?.copyWith(
+            color: context.palette.textPrimary,
+            fontWeight: FontWeight.w700,
+            height: 1.25,
+          ),
+        ),
+        const SizedBox(height: 6),
+        _MetaRow(icon: Icons.place_outlined, label: distance),
+        const SizedBox(height: 4),
+        _MetaRow(icon: Icons.people_outline, label: joinedLabel),
+        if (friendInitials.isNotEmpty && friendNamesLine != null) ...[
+          const SizedBox(height: 8),
           Row(
             children: [
-              _LiveBadge(textTheme: textTheme),
-              if (category != null && category!.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                _CategoryPill(label: category!, textTheme: textTheme),
-              ],
-              const Spacer(),
-              Text(
-                startsIn,
-                style: textTheme.labelLarge?.copyWith(
-                  color: AppColors.liveAccent,
-                  fontWeight: FontWeight.w600,
+              ...friendInitials.map(
+                (c) => Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: _MiniAvatar(letter: c),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  friendNamesLine!,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: context.palette.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+        ] else if (socialLine.isNotEmpty) ...[
+          const SizedBox(height: 6),
           Text(
-            title,
-            style: textTheme.titleMedium?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
+            socialLine,
+            style: textTheme.bodySmall?.copyWith(
+              color: context.palette.textMuted,
+              fontSize: 12,
             ),
           ),
-          const SizedBox(height: 10),
-          _MetaRow(icon: Icons.place_outlined, label: distance),
-          const SizedBox(height: 6),
-          _MetaRow(icon: Icons.people_outline, label: joinedLabel),
-          const SizedBox(height: 12),
-          if (friendInitials.isNotEmpty && friendNamesLine != null) ...[
-            Row(
-              children: [
-                ...friendInitials.map(
-                  (c) => Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: _MiniAvatar(letter: c),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    friendNamesLine!,
-                    style: textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
+        ],
+      ],
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: context.palette.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.palette.liveBorder, width: 1),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          onTapActivity == null
+              ? headerAndBody
+              : Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onTapActivity,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: headerAndBody,
                     ),
                   ),
                 ),
-              ],
-            ),
-          ] else
-            Text(
-              socialLine,
-              style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
-            ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: joinEnabled ? onJoin : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.joinLive,
-                foregroundColor: AppColors.joinLiveForeground,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
+          const SizedBox(height: 10),
+          if (isOwnActivity)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                gradient: BrandGradient.horizontal(context.palette),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.35),
                 ),
               ),
-              child: Text(joinButtonLabel),
+              child: Text(
+                joinButtonLabel,
+                style: textTheme.labelLarge?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            )
+          else if (isLeaveAction && onJoin != null)
+            MessengerStyleLeaveRow(
+              onLeave: joinEnabled ? onJoin : null,
+              enabled: joinEnabled,
+            )
+          else
+            GradientCtaButton(
+              onPressed: joinEnabled ? onJoin : null,
+              borderRadius: 12,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Text(
+                joinButtonLabel,
+                style: textTheme.labelLarge?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -130,17 +205,18 @@ class _CategoryPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.chipBorder),
+        color: context.palette.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.palette.chipBorder),
       ),
       child: Text(
         label,
         style: textTheme.labelSmall?.copyWith(
-          color: AppColors.textSecondary,
+          color: context.palette.textSecondary,
           fontWeight: FontWeight.w600,
+          fontSize: 11,
         ),
       ),
     );
@@ -155,28 +231,29 @@ class _LiveBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
+        color: context.palette.surface,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: AppColors.liveDot,
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: context.palette.liveDot,
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 5),
           Text(
             'Live',
-            style: textTheme.labelMedium?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
+            style: textTheme.labelSmall?.copyWith(
+              color: context.palette.textPrimary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
             ),
           ),
         ],
@@ -195,12 +272,18 @@ class _MetaRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppColors.textMuted),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: AppColors.textSecondary,
+        Icon(icon, size: 15, color: context.palette.textMuted),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.palette.textSecondary,
+              fontSize: 12,
+              height: 1.2,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -215,9 +298,11 @@ class _MiniAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = letter == 'A' ? AppColors.avatarPurple : AppColors.avatarGreen;
-    return CircleAvatar(
-      radius: 14,
+    final color = letter == 'A'
+        ? context.palette.avatarPurple
+        : context.palette.avatarGreen;
+    return GradientAvatar(
+      outerRadius: 12,
       backgroundColor: color,
       child: Text(
         letter,

@@ -1,8 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import '../../map/data/activity_geo.dart';
-
 /// Persists a new document under `activities/{autoId}` for the signed-in host.
 ///
 /// Firestore rules must allow: authenticated create with `hostUid == request.auth.uid`,
@@ -12,8 +10,12 @@ import '../../map/data/activity_geo.dart';
 Future<void> createActivity({
   required String title,
   required String spot,
+  required double latitude,
+  required double longitude,
   required String category,
+  required int minCapacity,
   required int capacity,
+  required bool capacityUnlimited,
   required bool isLive,
   required DateTime startsAt,
 }) async {
@@ -22,14 +24,15 @@ Future<void> createActivity({
     throw StateError('You must be signed in to post an activity.');
   }
 
-  final pin = ActivityGeo.randomNearDavao();
   final doc = FirebaseFirestore.instance.collection('activities').doc();
 
   await doc.set({
     'title': title,
     'spot': spot,
     'category': category,
+    'minCapacity': minCapacity,
     'capacity': capacity,
+    'capacityUnlimited': capacityUnlimited,
     'joinedCount': 1,
     'memberIds': <String>[user.uid],
     'isLive': isLive,
@@ -37,7 +40,7 @@ Future<void> createActivity({
     'hostUid': user.uid,
     if (user.email != null) 'hostEmail': user.email,
     'createdAt': FieldValue.serverTimestamp(),
-    'latitude': pin.latitude,
-    'longitude': pin.longitude,
+    'latitude': latitude,
+    'longitude': longitude,
   });
 }

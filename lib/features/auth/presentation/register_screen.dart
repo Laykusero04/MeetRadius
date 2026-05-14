@@ -1,7 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/meet_radius_palette.dart';
+import '../../../shared/widgets/brand_gradient.dart';
 import '../data/register_user.dart';
 
 /// Registration UI; wire to Firebase Auth when ready.
@@ -9,24 +10,25 @@ import '../data/register_user.dart';
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
-  static InputDecoration fieldDecoration(String label) {
+  static InputDecoration fieldDecoration(BuildContext context, String label) {
+    final p = context.palette;
     return InputDecoration(
       labelText: label,
       filled: true,
-      fillColor: AppColors.surface,
+      fillColor: p.surface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.cardBorderSubtle),
+        borderSide: BorderSide(color: p.cardBorderSubtle),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.cardBorderSubtle),
+        borderSide: BorderSide(color: p.cardBorderSubtle),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.liveAccent, width: 1.5),
+        borderSide: BorderSide(color: p.liveAccent, width: 1.5),
       ),
-      labelStyle: const TextStyle(color: AppColors.textSecondary),
+      labelStyle: TextStyle(color: p.textSecondary),
     );
   }
 
@@ -111,20 +113,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   'Join MeetRadius',
                   style: textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Create an account to discover activities near you.',
-                  style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                  style: textTheme.bodyMedium?.copyWith(color: context.palette.textSecondary),
                 ),
                 const SizedBox(height: 28),
                 TextFormField(
                   controller: _firstNameController,
                   textCapitalization: TextCapitalization.words,
                   autofillHints: const [AutofillHints.givenName],
-                  decoration: RegisterScreen.fieldDecoration('First name'),
+                  decoration: RegisterScreen.fieldDecoration(context, 'First name'),
                   validator: (value) {
                     if ((value?.trim() ?? '').isEmpty) return 'Enter your first name';
                     return null;
@@ -135,7 +137,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _lastNameController,
                   textCapitalization: TextCapitalization.words,
                   autofillHints: const [AutofillHints.familyName],
-                  decoration: RegisterScreen.fieldDecoration('Last name'),
+                  decoration: RegisterScreen.fieldDecoration(context, 'Last name'),
                   validator: (value) {
                     if ((value?.trim() ?? '').isEmpty) return 'Enter your last name';
                     return null;
@@ -146,7 +148,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.email],
-                  decoration: RegisterScreen.fieldDecoration('Email'),
+                  decoration: RegisterScreen.fieldDecoration(context, 'Email'),
                   validator: (value) {
                     final v = value?.trim() ?? '';
                     if (v.isEmpty) return 'Enter your email';
@@ -159,7 +161,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   autofillHints: const [AutofillHints.newPassword],
-                  decoration: RegisterScreen.fieldDecoration('Password').copyWith(
+                  decoration: RegisterScreen.fieldDecoration(context, 'Password').copyWith(
                     suffixIcon: IconButton(
                       tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                       onPressed: () {
@@ -167,7 +169,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       },
                       icon: Icon(
                         _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        color: AppColors.textMuted,
+                        color: context.palette.textMuted,
                       ),
                     ),
                   ),
@@ -183,7 +185,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _confirmPasswordController,
                   obscureText: _obscureConfirm,
                   autofillHints: const [AutofillHints.newPassword],
-                  decoration: RegisterScreen.fieldDecoration('Confirm password').copyWith(
+                  decoration: RegisterScreen.fieldDecoration(context, 'Confirm password').copyWith(
                     suffixIcon: IconButton(
                       tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
                       onPressed: () {
@@ -191,7 +193,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       },
                       icon: Icon(
                         _obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        color: AppColors.textMuted,
+                        color: context.palette.textMuted,
                       ),
                     ),
                   ),
@@ -202,20 +204,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 24),
-                FilledButton(
+                GradientCtaButton(
                   onPressed: _submitting ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: AppColors.liveAccent,
-                    foregroundColor: AppColors.textPrimary,
-                  ),
                   child: _submitting
                       ? const SizedBox(
                           height: 22,
                           width: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: AppColors.textPrimary,
+                            color: Colors.white,
                           ),
                         )
                       : const Text('Create account'),
@@ -223,15 +220,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 28),
                 Row(
                   children: [
-                    const Expanded(child: Divider(color: AppColors.cardBorderSubtle)),
+                    Expanded(child: Divider(color: context.palette.cardBorderSubtle)),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
                         'or continue with',
-                        style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+                        style: textTheme.bodySmall?.copyWith(color: context.palette.textMuted),
                       ),
                     ),
-                    const Expanded(child: Divider(color: AppColors.cardBorderSubtle)),
+                    Expanded(child: Divider(color: context.palette.cardBorderSubtle)),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -244,8 +241,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          foregroundColor: AppColors.textPrimary,
-                          side: const BorderSide(color: AppColors.cardBorderSubtle),
+                          foregroundColor: context.palette.textPrimary,
+                          side: BorderSide(color: context.palette.cardBorderSubtle),
                         ),
                         child: Text('Google', style: textTheme.labelLarge),
                       ),
@@ -258,8 +255,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          foregroundColor: AppColors.textPrimary,
-                          side: const BorderSide(color: AppColors.cardBorderSubtle),
+                          foregroundColor: context.palette.textPrimary,
+                          side: BorderSide(color: context.palette.cardBorderSubtle),
                         ),
                         child: Text('Facebook', style: textTheme.labelLarge),
                       ),
@@ -272,7 +269,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     Text(
                       'Already have an account?',
-                      style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                      style: textTheme.bodyMedium?.copyWith(color: context.palette.textSecondary),
                     ),
                     TextButton(
                       onPressed: () => Navigator.of(context).maybePop(),

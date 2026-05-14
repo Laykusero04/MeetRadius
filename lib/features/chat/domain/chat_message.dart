@@ -1,5 +1,34 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Stored in Firestore on `messages` docs as `eventKind`.
+const String kChatEventKindMemberLeft = 'member_left';
+
+/// Snapshot of a message being replied to (stored on the new message doc).
+class ChatReplySnapshot {
+  const ChatReplySnapshot({
+    required this.messageId,
+    required this.textSnippet,
+    required this.senderDisplayName,
+  });
+
+  final String messageId;
+  final String textSnippet;
+  final String senderDisplayName;
+
+  factory ChatReplySnapshot.fromMessage(ChatMessage m) {
+    var snippet = m.text.trim();
+    if (snippet.length > 80) {
+      snippet = '${snippet.substring(0, 80)}…';
+    }
+    if (snippet.isEmpty) snippet = 'Message';
+    return ChatReplySnapshot(
+      messageId: m.id,
+      textSnippet: snippet,
+      senderDisplayName: m.senderDisplayName,
+    );
+  }
+}
+
 /// One row under `activities/{activityId}/messages/{messageId}`.
 class ChatMessage {
   const ChatMessage({
@@ -8,6 +37,10 @@ class ChatMessage {
     required this.senderUid,
     required this.senderDisplayName,
     required this.createdAt,
+    this.eventKind,
+    this.replyToMessageId,
+    this.replyToText,
+    this.replyToSenderDisplayName,
   });
 
   final String id;
@@ -15,6 +48,21 @@ class ChatMessage {
   final String senderUid;
   final String senderDisplayName;
   final DateTime createdAt;
+
+  /// When set (e.g. `member_left`), UI shows a Messenger-style system line, not a bubble.
+  final String? eventKind;
+
+  /// Reply target (optional).
+  final String? replyToMessageId;
+  final String? replyToText;
+  final String? replyToSenderDisplayName;
+
+  bool get isMemberLeftEvent => eventKind == kChatEventKindMemberLeft;
+
+  bool get hasReply =>
+      replyToMessageId != null &&
+      replyToMessageId!.isNotEmpty &&
+      (replyToText != null && replyToText!.trim().isNotEmpty);
 
   factory ChatMessage.fromFirestore(String id, Map<String, dynamic> data) {
     final c = data['createdAt'];
@@ -28,6 +76,10 @@ class ChatMessage {
       senderUid: (data['senderUid'] as String?) ?? '',
       senderDisplayName: (data['senderDisplayName'] as String?) ?? 'Member',
       createdAt: created,
+      eventKind: data['eventKind'] as String?,
+      replyToMessageId: data['replyToMessageId'] as String?,
+      replyToText: data['replyToText'] as String?,
+      replyToSenderDisplayName: data['replyToSenderDisplayName'] as String?,
     );
   }
 }

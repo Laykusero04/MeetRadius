@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/meet_radius_palette.dart';
 
 /// Lightweight placeholder for Settings, Help, etc.
 class SimpleMenuPage extends StatelessWidget {
@@ -15,12 +15,13 @@ class SimpleMenuPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Scaffold(
-      backgroundColor: AppColors.scaffold,
+      backgroundColor: p.scaffold,
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: AppColors.scaffold,
-        foregroundColor: AppColors.textPrimary,
+        backgroundColor: p.scaffold,
+        foregroundColor: p.textPrimary,
         surfaceTintColor: Colors.transparent,
       ),
       body: Center(
@@ -30,7 +31,7 @@ class SimpleMenuPage extends StatelessWidget {
             message,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: p.textSecondary,
                 ),
           ),
         ),

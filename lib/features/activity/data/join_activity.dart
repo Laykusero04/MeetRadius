@@ -21,6 +21,7 @@ Future<void> joinActivity(String activityId) async {
       return;
     }
 
+    final unlimited = data['capacityUnlimited'] as bool? ?? false;
     final capacity = (data['capacity'] as num?)?.toInt() ?? 0;
     final rawMembers = data['memberIds'];
     final members = List<String>.from(
@@ -29,7 +30,7 @@ Future<void> joinActivity(String activityId) async {
     if (members.contains(uid)) {
       throw StateError('You already joined this activity.');
     }
-    if (members.length >= capacity) {
+    if (!unlimited && members.length >= capacity) {
       throw StateError('This activity is full.');
     }
     members.add(uid);

@@ -1,7 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/meet_radius_palette.dart';
+import '../../../shared/widgets/brand_gradient.dart';
 import 'register_screen.dart';
 
 /// Email/password UI; wire to Firebase Auth when ready.
@@ -79,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   textAlign: TextAlign.center,
                   style: textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -87,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   'Welcome back',
                   textAlign: TextAlign.center,
                   style: textTheme.titleMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.palette.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 36),
@@ -95,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.email],
-                  decoration: _fieldDecoration('Email'),
+                  decoration: _fieldDecoration(context, 'Email'),
                   validator: (value) {
                     final v = value?.trim() ?? '';
                     if (v.isEmpty) return 'Enter your email';
@@ -108,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   autofillHints: const [AutofillHints.password],
-                  decoration: _fieldDecoration('Password').copyWith(
+                  decoration: _fieldDecoration(context, 'Password').copyWith(
                     suffixIcon: IconButton(
                       tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                       onPressed: () {
@@ -116,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                       icon: Icon(
                         _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        color: AppColors.textMuted,
+                        color: context.palette.textMuted,
                       ),
                     ),
                   ),
@@ -135,20 +136,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                FilledButton(
+                GradientCtaButton(
                   onPressed: _submitting ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: AppColors.liveAccent,
-                    foregroundColor: AppColors.textPrimary,
-                  ),
                   child: _submitting
                       ? const SizedBox(
                           height: 22,
                           width: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: AppColors.textPrimary,
+                            color: Colors.white,
                           ),
                         )
                       : const Text('Sign in'),
@@ -156,15 +152,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 28),
                 Row(
                   children: [
-                    const Expanded(child: Divider(color: AppColors.cardBorderSubtle)),
+                    Expanded(child: Divider(color: context.palette.cardBorderSubtle)),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
                         'or continue with',
-                        style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+                        style: textTheme.bodySmall?.copyWith(color: context.palette.textMuted),
                       ),
                     ),
-                    const Expanded(child: Divider(color: AppColors.cardBorderSubtle)),
+                    Expanded(child: Divider(color: context.palette.cardBorderSubtle)),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -175,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     Text(
                       "Don't have an account?",
-                      style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                      style: textTheme.bodyMedium?.copyWith(color: context.palette.textSecondary),
                     ),
                     TextButton(
                       onPressed: () {
@@ -197,24 +193,25 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  static InputDecoration _fieldDecoration(String label) {
+  InputDecoration _fieldDecoration(BuildContext context, String label) {
+    final p = context.palette;
     return InputDecoration(
       labelText: label,
       filled: true,
-      fillColor: AppColors.surface,
+      fillColor: p.surface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.cardBorderSubtle),
+        borderSide: BorderSide(color: p.cardBorderSubtle),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.cardBorderSubtle),
+        borderSide: BorderSide(color: p.cardBorderSubtle),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.liveAccent, width: 1.5),
+        borderSide: BorderSide(color: p.liveAccent, width: 1.5),
       ),
-      labelStyle: const TextStyle(color: AppColors.textSecondary),
+      labelStyle: TextStyle(color: p.textSecondary),
     );
   }
 }
@@ -235,8 +232,8 @@ class _SocialPlaceholderRow extends StatelessWidget {
             },
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
-              foregroundColor: AppColors.textPrimary,
-              side: const BorderSide(color: AppColors.cardBorderSubtle),
+              foregroundColor: context.palette.textPrimary,
+              side: BorderSide(color: context.palette.cardBorderSubtle),
             ),
             child: Text('Google', style: textTheme.labelLarge),
           ),
@@ -249,8 +246,8 @@ class _SocialPlaceholderRow extends StatelessWidget {
             },
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
-              foregroundColor: AppColors.textPrimary,
-              side: const BorderSide(color: AppColors.cardBorderSubtle),
+              foregroundColor: context.palette.textPrimary,
+              side: BorderSide(color: context.palette.cardBorderSubtle),
             ),
             child: Text('Facebook', style: textTheme.labelLarge),
           ),

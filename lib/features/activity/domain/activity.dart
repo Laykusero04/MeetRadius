@@ -1,3 +1,5 @@
+import 'activity_categories.dart';
+
 /// Activity shown on the feed / map / chats.
 class Activity {
   const Activity({
@@ -7,6 +9,8 @@ class Activity {
     required this.category,
     required this.capacity,
     required this.joinedCount,
+    this.minCapacity = 2,
+    this.capacityUnlimited = false,
     required this.isLive,
     required this.startsAt,
     required this.hostUid,
@@ -24,6 +28,10 @@ class Activity {
   final String category;
   final int capacity;
   final int joinedCount;
+  /// Minimum attendees the host wants (informational; default 2 for legacy docs).
+  final int minCapacity;
+  /// When true, [capacity] is not enforced for joins (open-ended group size).
+  final bool capacityUnlimited;
   final bool isLive;
   final DateTime startsAt;
   final String hostUid;
@@ -35,18 +43,7 @@ class Activity {
   final List<String> memberIds;
 
   bool matchesFeedChip(int chipIndex) {
-    if (chipIndex <= 0) return true;
-    final label = _chipIndexToCategory(chipIndex);
-    if (label == null) return true;
-    return category == label;
-  }
-
-  static String? _chipIndexToCategory(int chipIndex) {
-    return switch (chipIndex) {
-      1 => 'Sports',
-      2 => 'Social',
-      3 => 'Outdoor',
-      _ => null,
-    };
+    if (chipIndex <= 0 || chipIndex >= kFeedCategoryLabels.length) return true;
+    return category == kFeedCategoryLabels[chipIndex];
   }
 }

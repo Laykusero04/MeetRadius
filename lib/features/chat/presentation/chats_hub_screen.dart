@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/meet_radius_palette.dart';
 import '../../activity/domain/activity.dart';
 import '../data/watch_my_chat_threads.dart';
 import 'activity_chat_thread_screen.dart';
@@ -40,14 +40,16 @@ class _SignedOutChats extends StatelessWidget {
           Text(
             'Chats',
             style: textTheme.headlineSmall?.copyWith(
-              color: AppColors.textPrimary,
+              color: context.palette.textPrimary,
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 12),
           Text(
             'Sign in to see group chats for activities you host or join.',
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            style: textTheme.bodyMedium?.copyWith(
+              color: context.palette.textSecondary,
+            ),
           ),
         ],
       ),
@@ -66,23 +68,6 @@ class _ChatsThreadList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text(
-            'Chats',
-            style: textTheme.headlineSmall?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Text(
-            'One thread per activity you’re in. Messages sync with Firestore.',
-            style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
-          ),
-        ),
         Expanded(
           child: StreamBuilder<List<Activity>>(
             stream: watchMyChatThreads(),
@@ -94,7 +79,7 @@ class _ChatsThreadList extends StatelessWidget {
                     child: Text(
                       'Could not load chats.\n${snap.error}',
                       style: textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: context.palette.textSecondary,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -120,7 +105,7 @@ class _ChatsThreadList extends StatelessWidget {
                       'No chats yet.\nHost or join an activity — each has a group thread.',
                       textAlign: TextAlign.center,
                       style: textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textMuted,
+                        color: context.palette.textMuted,
                         height: 1.45,
                       ),
                     ),
@@ -133,14 +118,15 @@ class _ChatsThreadList extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, i) {
                   final a = threads[i];
-                  final preview = (a.lastMessagePreview?.trim().isNotEmpty == true)
+                  final preview =
+                      (a.lastMessagePreview?.trim().isNotEmpty == true)
                       ? a.lastMessagePreview!.trim()
                       : 'Tap to open chat · ${a.spot}';
                   final time = a.lastMessageAt != null
                       ? shortRelativeChatTime(a.lastMessageAt!, now)
                       : '';
                   return Material(
-                    color: AppColors.card,
+                    color: context.palette.card,
                     borderRadius: BorderRadius.circular(16),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
@@ -165,16 +151,20 @@ class _ChatsThreadList extends StatelessWidget {
                               width: 44,
                               height: 44,
                               decoration: BoxDecoration(
-                                color: AppColors.surface,
+                                color: context.palette.surface,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppColors.chipBorder),
+                                border: Border.all(
+                                  color: context.palette.chipBorder,
+                                ),
                               ),
                               alignment: Alignment.center,
                               child: Icon(
-                                a.isLive ? Icons.bolt : Icons.chat_bubble_outline,
+                                a.isLive
+                                    ? Icons.bolt
+                                    : Icons.chat_bubble_outline,
                                 color: a.isLive
-                                    ? AppColors.liveAccent
-                                    : AppColors.textMuted,
+                                    ? context.palette.liveAccent
+                                    : context.palette.textMuted,
                                 size: 22,
                               ),
                             ),
@@ -188,7 +178,7 @@ class _ChatsThreadList extends StatelessWidget {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: textTheme.titleSmall?.copyWith(
-                                      color: AppColors.textPrimary,
+                                      color: context.palette.textPrimary,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -198,7 +188,7 @@ class _ChatsThreadList extends StatelessWidget {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: textTheme.bodySmall?.copyWith(
-                                      color: AppColors.textSecondary,
+                                      color: context.palette.textSecondary,
                                       height: 1.3,
                                     ),
                                   ),
@@ -209,7 +199,7 @@ class _ChatsThreadList extends StatelessWidget {
                               Text(
                                 time,
                                 style: textTheme.labelSmall?.copyWith(
-                                  color: AppColors.textMuted,
+                                  color: context.palette.textMuted,
                                 ),
                               ),
                           ],

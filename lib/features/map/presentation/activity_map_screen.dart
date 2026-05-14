@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/meet_radius_palette.dart';
 import '../../activity/data/watch_activities.dart';
 import '../../activity/domain/activity.dart';
-import '../../feed/presentation/widgets/activity_feed_labels.dart';
+import '../../activity/presentation/feed_activity_detail_screen.dart';
 import '../data/activity_geo.dart';
 
 /// Map pins from Firestore `activities` (see [watchActivities]).
@@ -21,6 +21,7 @@ class ActivityMapScreen extends StatelessWidget {
       builder: (context, snap) {
         final activities = snap.data ?? const <Activity>[];
         final liveCount = activities.where((a) => a.isLive).length;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
 
         return Stack(
       children: [
@@ -30,12 +31,13 @@ class ActivityMapScreen extends StatelessWidget {
             initialZoom: 11.4,
             minZoom: 9,
             maxZoom: 18,
-            backgroundColor: AppColors.scaffold,
+            backgroundColor: context.palette.scaffold,
           ),
           children: [
             TileLayer(
-              urlTemplate:
-                  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+              urlTemplate: isDark
+                  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                  : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
               subdomains: const ['a', 'b', 'c', 'd'],
               userAgentPackageName: 'com.example.meet_radius',
             ),
@@ -49,18 +51,22 @@ class ActivityMapScreen extends StatelessWidget {
                     child: _ActivityPinButton(
                       live: a.isLive,
                       icon: _categoryIcon(a.category),
-                      onTap: () => _showActivitySheet(context, a),
+                      onTap: () => openFeedActivityDetail(
+                        context,
+                        activityId: a.id,
+                        activityTitle: a.title,
+                      ),
                     ),
                   ),
               ],
             ),
             SimpleAttributionWidget(
               alignment: Alignment.bottomRight,
-              backgroundColor: AppColors.navBar.withValues(alpha: 0.92),
+              backgroundColor: context.palette.navBar.withValues(alpha: 0.92),
               source: Text(
                 'OpenStreetMap contributors, CARTO',
                 style: textTheme.labelSmall?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.palette.textSecondary,
                   decoration: TextDecoration.underline,
                 ),
               ),
@@ -81,7 +87,7 @@ class ActivityMapScreen extends StatelessWidget {
                     child: Text(
                       'Davao City · 15 mi',
                       style: textTheme.titleSmall?.copyWith(
-                        color: AppColors.textPrimary,
+                        color: context.palette.textPrimary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -92,9 +98,9 @@ class ActivityMapScreen extends StatelessWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.card,
+                      color: context.palette.card,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.chipBorder),
+                      border: Border.all(color: context.palette.chipBorder),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -102,13 +108,13 @@ class ActivityMapScreen extends StatelessWidget {
                         Icon(
                           Icons.bolt,
                           size: 16,
-                          color: AppColors.liveAccent,
+                          color: context.palette.liveAccent,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '$liveCount live',
                           style: textTheme.labelMedium?.copyWith(
-                            color: AppColors.textPrimary,
+                            color: context.palette.textPrimary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -139,123 +145,13 @@ class ActivityMapScreen extends StatelessWidget {
       'Coffee' => Icons.local_cafe_outlined,
       'Social' => Icons.groups_2_outlined,
       'Outdoor' => Icons.terrain_outlined,
+      'Gym' => Icons.fitness_center,
+      'Study' => Icons.menu_book_outlined,
+      'Food' => Icons.restaurant_outlined,
+      'Music' => Icons.music_note_outlined,
+      'Other' => Icons.more_horiz,
       _ => Icons.place_outlined,
     };
-  }
-
-  static void _showActivitySheet(BuildContext context, Activity a) {
-    final textTheme = Theme.of(context).textTheme;
-    final now = DateTime.now();
-    final subtitle = a.isLive
-        ? 'Live · ${activityStartsInLine(a.startsAt, now)}'
-        : '${activitySchedulePill(a.startsAt)} · ${activityStartsInLine(a.startsAt, now)}';
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.chipBorder,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (a.isLive) ...[
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: AppColors.liveDot,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'LIVE',
-                      style: textTheme.labelLarge?.copyWith(
-                        color: AppColors.liveAccent,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-              ],
-              Text(
-                a.title,
-                style: textTheme.titleMedium?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.place_outlined, size: 18, color: AppColors.textMuted),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      a.spot.isEmpty ? 'Nearby' : a.spot,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${a.joinedCount} of ${a.capacity} going · ${a.category}',
-                style: textTheme.labelMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.joinLive,
-                    foregroundColor: AppColors.joinLiveForeground,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                  child: const Text('Close'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 }
 
@@ -272,12 +168,12 @@ class _ActivityPinButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ring = live ? AppColors.liveAccent : AppColors.upcomingBlue;
+    final ring = live ? context.palette.liveAccent : context.palette.upcomingBlue;
     final fill = live
-        ? AppColors.joinLive.withValues(alpha: 0.95)
-        : AppColors.joinUpcoming;
+        ? context.palette.joinLive.withValues(alpha: 0.95)
+        : context.palette.joinUpcoming;
     final iconColor =
-        live ? AppColors.joinLiveForeground : AppColors.joinUpcomingForeground;
+        live ? context.palette.joinLiveForeground : context.palette.joinUpcomingForeground;
 
     return Material(
       color: Colors.transparent,

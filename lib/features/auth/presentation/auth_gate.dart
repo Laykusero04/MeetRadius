@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/meet_radius_palette.dart';
 import '../../feed/presentation/home_feed_screen.dart';
 import 'login_screen.dart';
 
@@ -15,15 +15,16 @@ class AuthGate extends StatelessWidget {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
+          final p = context.palette;
           return Scaffold(
-            backgroundColor: AppColors.scaffold,
+            backgroundColor: p.scaffold,
             body: Center(
               child: SizedBox(
                 width: 36,
                 height: 36,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: AppColors.liveAccent.withValues(alpha: 0.9),
+                  color: p.liveAccent.withValues(alpha: 0.9),
                 ),
               ),
             ),
