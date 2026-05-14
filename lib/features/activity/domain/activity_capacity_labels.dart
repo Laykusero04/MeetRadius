@@ -16,9 +16,8 @@ String activityLiveJoinedLabel(Activity a) {
   return '${a.joinedCount} of ${a.capacity} joined';
 }
 
-/// One line for settings / group info: min, max or ∞, and current turnout.
+/// One line for settings / group info: max or ∞, and current turnout.
 String activityCapacityDetail(Activity a) {
-  final minPart = 'Min ${a.minCapacity}';
   final maxPart = a.capacityUnlimited ? 'Max ∞' : 'Max ${a.capacity}';
-  return '$minPart · $maxPart · ${activityGoingLabel(a)}';
+  return '$maxPart · ${activityGoingLabel(a)}';
 }

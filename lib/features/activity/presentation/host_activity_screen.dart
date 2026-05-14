@@ -21,7 +21,6 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
   final _titleCtrl = TextEditingController();
   final _spotCtrl = TextEditingController();
   int _typeIndex = 0;
-  int _minCapacity = 2;
   int _maxCapacity = 6;
   bool _capacityUnlimited = false;
   static const int _absMin = 2;
@@ -139,13 +138,6 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
     return '$lat, $lng';
   }
 
-  int _minCapacityUpperBound() {
-    if (_capacityUnlimited) return _absMax;
-    return _maxCapacity.clamp(_absMin, _absMax);
-  }
-
-  int _maxDecrementFloor() => _minCapacity.clamp(_absMin, _absMax);
-
   void _goNext() {
     FocusScope.of(context).unfocus();
     final messenger = ScaffoldMessenger.of(context);
@@ -202,14 +194,6 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
       );
       return;
     }
-    if (!_capacityUnlimited && _maxCapacity < _minCapacity) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Max attendees must be at least your minimum.'),
-        ),
-      );
-      return;
-    }
 
     setState(() => _posting = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -220,9 +204,8 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
         latitude: _meetingPin.latitude,
         longitude: _meetingPin.longitude,
         category: _types[_typeIndex].$1,
-        minCapacity: _minCapacity,
         capacity: _capacityUnlimited
-            ? (_maxCapacity >= _minCapacity ? _maxCapacity : _minCapacity)
+            ? (_maxCapacity >= _absMin ? _maxCapacity : _absMin)
             : _maxCapacity,
         capacityUnlimited: _capacityUnlimited,
         isLive: _goLive,
@@ -243,7 +226,6 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
       _titleCtrl.clear();
       _spotCtrl.clear();
       setState(() {
-        _minCapacity = 2;
         _maxCapacity = 6;
         _capacityUnlimited = false;
         _typeIndex = 0;
@@ -490,89 +472,13 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
           ),
         ),
         const SizedBox(height: 20),
-        const _SectionLabel(text: 'MIN ATTENDEES'),
-        const SizedBox(height: 8),
-        Text(
-          'How many people you want before it feels like a real group ($_absMin–$_absMax).',
-          style: textTheme.bodySmall?.copyWith(color: p.textSecondary),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Material(
-              color: p.surface,
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                onTap: _minCapacity > _absMin
-                    ? () => setState(() => _minCapacity--)
-                    : null,
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Icon(
-                    Icons.remove,
-                    color: _minCapacity > _absMin
-                        ? p.textPrimary
-                        : p.textMuted,
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                children: [
-                  Text(
-                    '$_minCapacity',
-                    style: textTheme.headlineMedium?.copyWith(
-                      color: p.textPrimary,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Text(
-                    'minimum',
-                    style: textTheme.bodySmall?.copyWith(color: p.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            Material(
-              color: p.surface,
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                onTap: _minCapacity < _minCapacityUpperBound()
-                    ? () => setState(() {
-                          if (_minCapacity >= _absMax) return;
-                          _minCapacity++;
-                          if (!_capacityUnlimited &&
-                              _maxCapacity < _minCapacity) {
-                            _maxCapacity = _minCapacity.clamp(_absMin, _absMax);
-                          }
-                        })
-                    : null,
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Icon(
-                    Icons.add,
-                    color: _minCapacity < _minCapacityUpperBound()
-                        ? p.textPrimary
-                        : p.textMuted,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
         SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
           value: _capacityUnlimited,
           onChanged: (v) => setState(() {
             _capacityUnlimited = v;
-            if (!v && _maxCapacity < _minCapacity) {
-              _maxCapacity = _minCapacity.clamp(_absMin, _absMax);
+            if (!v && _maxCapacity < _absMin) {
+              _maxCapacity = _absMin;
             }
           }),
           title: Text(
@@ -583,7 +489,7 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
             ),
           ),
           subtitle: Text(
-            'Anyone can join; you still set a minimum group size above.',
+            'Anyone can join until you turn this off.',
             style: textTheme.bodySmall?.copyWith(color: p.textSecondary),
           ),
           activeThumbColor: p.liveAccent,
@@ -594,7 +500,7 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
           const _SectionLabel(text: 'MAX ATTENDEES'),
           const SizedBox(height: 8),
           Text(
-            'Tap − or + to set the cap. Range up to $_absMax (must be ≥ minimum).',
+            'Tap − or + to set the cap. Range $_absMin–$_absMax.',
             style: textTheme.bodySmall?.copyWith(color: p.textSecondary),
           ),
           const SizedBox(height: 12),
@@ -604,7 +510,7 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
                 color: p.surface,
                 borderRadius: BorderRadius.circular(12),
                 child: InkWell(
-                  onTap: _maxCapacity > _maxDecrementFloor()
+                  onTap: _maxCapacity > _absMin
                       ? () => setState(() => _maxCapacity--)
                       : null,
                   borderRadius: BorderRadius.circular(12),
@@ -613,7 +519,7 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
                     height: 48,
                     child: Icon(
                       Icons.remove,
-                      color: _maxCapacity > _maxDecrementFloor()
+                      color: _maxCapacity > _absMin
                           ? p.textPrimary
                           : p.textMuted,
                     ),

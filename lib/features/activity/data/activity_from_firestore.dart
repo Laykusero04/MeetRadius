@@ -21,7 +21,6 @@ Activity activityFromFirestore(String id, Map<String, dynamic> data) {
     category: (data['category'] as String?) ?? 'Other',
     capacity: (data['capacity'] as num?)?.toInt() ?? 6,
     joinedCount: (data['joinedCount'] as num?)?.toInt() ?? 0,
-    minCapacity: (data['minCapacity'] as num?)?.toInt() ?? 2,
     capacityUnlimited: data['capacityUnlimited'] as bool? ?? false,
     isLive: data['isLive'] as bool? ?? false,
     startsAt: startsAt,

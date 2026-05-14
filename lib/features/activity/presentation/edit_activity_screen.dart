@@ -27,7 +27,6 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _spotCtrl;
   late int _typeIndex;
-  late int _minCapacity;
   late int _maxCapacity;
   late bool _capacityUnlimited;
   late bool _goLive;
@@ -71,14 +70,12 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
     _typeIndex = idx >= 0 ? idx : kActivityCategoryValues.indexOf('Other');
     _goLive = a.isLive;
     _startsAt = a.startsAt;
-    _minCapacity = min(_capacityMax, max(2, a.minCapacity));
     _capacityUnlimited = a.capacityUnlimited;
     final floor = _maxCapacityHostFloor;
-    var maxC = max(floor, min(_capacityMax, a.capacity));
-    if (!a.capacityUnlimited && maxC < _minCapacity) {
-      maxC = _minCapacity.clamp(floor, _capacityMax);
-    }
-    _maxCapacity = maxC.clamp(floor, _capacityMax);
+    _maxCapacity = max(floor, min(_capacityMax, a.capacity)).clamp(
+      floor,
+      _capacityMax,
+    );
     _meetingPin = (a.latitude != null && a.longitude != null)
         ? LatLng(a.latitude!, a.longitude!)
         : ActivityGeo.jitterFromActivityId(a.id);
@@ -159,14 +156,6 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
     return '$lat, $lng';
   }
 
-  int _minCapacityUpperBound() {
-    if (_capacityUnlimited) return _capacityMax;
-    return _maxCapacity.clamp(_maxCapacityHostFloor, _capacityMax);
-  }
-
-  int _maxDecrementFloor() =>
-      max(_maxCapacityHostFloor, _minCapacity).clamp(2, _capacityMax);
-
   Future<void> _save() async {
     final title = _titleCtrl.text.trim();
     final spot = _spotCtrl.text.trim();
@@ -209,9 +198,8 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
         latitude: _meetingPin.latitude,
         longitude: _meetingPin.longitude,
         category: _types[_typeIndex].$1,
-        minCapacity: _minCapacity,
         capacity: _capacityUnlimited
-            ? (_maxCapacity >= _minCapacity ? _maxCapacity : _minCapacity)
+            ? max(_maxCapacityHostFloor, _maxCapacity)
             : _maxCapacity,
         capacityUnlimited: _capacityUnlimited,
         isLive: _goLive,
@@ -428,89 +416,6 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
                 onTap: _busy ? null : _pickMeetingSpotOnMap,
               ),
               const SizedBox(height: 20),
-              const _EditSectionLabel(text: 'MIN ATTENDEES'),
-              const SizedBox(height: 8),
-              Text(
-                'Target minimum group size (2–$_capacityMax).',
-                style: textTheme.bodySmall?.copyWith(color: p.textSecondary),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Material(
-                    color: p.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      onTap: _busy || _minCapacity <= 2
-                          ? null
-                          : () => setState(() => _minCapacity--),
-                      borderRadius: BorderRadius.circular(12),
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Icon(
-                          Icons.remove,
-                          color: _minCapacity > 2 && !_busy
-                              ? p.textPrimary
-                              : p.textMuted,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text(
-                          '$_minCapacity',
-                          style: textTheme.headlineMedium?.copyWith(
-                            color: p.textPrimary,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        Text(
-                          'minimum',
-                          style: textTheme.labelSmall?.copyWith(
-                            color: p.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Material(
-                    color: p.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      onTap: _busy ||
-                              _minCapacity >= _minCapacityUpperBound()
-                          ? null
-                          : () => setState(() {
-                                if (_minCapacity >= _capacityMax) return;
-                                _minCapacity++;
-                                if (!_capacityUnlimited &&
-                                    _maxCapacity < _minCapacity) {
-                                  _maxCapacity = _minCapacity.clamp(
-                                    _maxCapacityHostFloor,
-                                    _capacityMax,
-                                  );
-                                }
-                              }),
-                      borderRadius: BorderRadius.circular(12),
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Icon(
-                          Icons.add,
-                          color: !_busy &&
-                                  _minCapacity < _minCapacityUpperBound()
-                              ? p.textPrimary
-                              : p.textMuted,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 value: _capacityUnlimited,
@@ -518,9 +423,9 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
                     ? null
                     : (v) => setState(() {
                           _capacityUnlimited = v;
-                          if (!v && _maxCapacity < _minCapacity) {
-                            _maxCapacity = _minCapacity.clamp(
-                              _maxCapacityHostFloor,
+                          if (!v && _maxCapacity < _maxCapacityHostFloor) {
+                            _maxCapacity = _maxCapacityHostFloor.clamp(
+                              2,
                               _capacityMax,
                             );
                           }
@@ -554,7 +459,7 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
                       color: p.surface,
                       borderRadius: BorderRadius.circular(12),
                       child: InkWell(
-                        onTap: _busy || _maxCapacity <= _maxDecrementFloor()
+                        onTap: _busy || _maxCapacity <= _maxCapacityHostFloor
                             ? null
                             : () => setState(() => _maxCapacity--),
                         borderRadius: BorderRadius.circular(12),
@@ -563,7 +468,7 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
                           height: 48,
                           child: Icon(
                             Icons.remove,
-                            color: _maxCapacity > _maxDecrementFloor() && !_busy
+                            color: _maxCapacity > _maxCapacityHostFloor && !_busy
                                 ? p.textPrimary
                                 : p.textMuted,
                           ),

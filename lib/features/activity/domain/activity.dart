@@ -9,7 +9,6 @@ class Activity {
     required this.category,
     required this.capacity,
     required this.joinedCount,
-    this.minCapacity = 2,
     this.capacityUnlimited = false,
     required this.isLive,
     required this.startsAt,
@@ -28,8 +27,6 @@ class Activity {
   final String category;
   final int capacity;
   final int joinedCount;
-  /// Minimum attendees the host wants (informational; default 2 for legacy docs).
-  final int minCapacity;
   /// When true, [capacity] is not enforced for joins (open-ended group size).
   final bool capacityUnlimited;
   final bool isLive;

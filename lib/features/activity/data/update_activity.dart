@@ -12,7 +12,6 @@ Future<void> updateActivity({
   required double latitude,
   required double longitude,
   required String category,
-  required int minCapacity,
   required int capacity,
   required bool capacityUnlimited,
   required bool isLive,
@@ -35,18 +34,10 @@ Future<void> updateActivity({
       throw StateError('Only the host can edit this activity.');
     }
     final joined = (data['joinedCount'] as num?)?.toInt() ?? 0;
-    if (minCapacity < 2 || minCapacity > 30) {
-      throw StateError('Minimum attendees must be between 2 and 30.');
-    }
     if (!capacityUnlimited) {
       if (capacity < joined) {
         throw StateError(
           'Max attendees cannot be below how many people already joined ($joined).',
-        );
-      }
-      if (capacity < minCapacity) {
-        throw StateError(
-          'Max attendees must be at least your minimum ($minCapacity).',
         );
       }
     }
@@ -56,7 +47,6 @@ Future<void> updateActivity({
       'latitude': latitude,
       'longitude': longitude,
       'category': category,
-      'minCapacity': minCapacity,
       'capacity': capacity,
       'capacityUnlimited': capacityUnlimited,
       'isLive': isLive,
