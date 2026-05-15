@@ -204,6 +204,11 @@ class ActivityDetailsSummaryCard extends StatelessWidget {
     final spot = activity.spot.trim().isEmpty ? 'Not set' : activity.spot.trim();
     final schedule = activitySchedulePill(activity.startsAt);
     final relative = activityStartsInLine(activity.startsAt, now);
+    final endsAt = activity.endsAt;
+    final endsSchedule =
+        endsAt != null ? activitySchedulePill(endsAt) : null;
+    final endsRelative =
+        endsAt != null ? activityEndsInLine(endsAt, now) : null;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -232,10 +237,18 @@ class ActivityDetailsSummaryCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             ActivityDetailRow(
-              icon: activity.isLive ? Icons.bolt : Icons.event_available_outlined,
+              icon: activity.isEnded
+                  ? Icons.stop_circle_outlined
+                  : (activity.isLive
+                      ? Icons.bolt
+                      : Icons.event_available_outlined),
               label: 'Status',
-              value: activity.isLive ? 'Live now' : 'Upcoming',
-              valueColor: activity.isLive ? p.liveAccent : p.upcomingBlue,
+              value: activity.isEnded || activity.isPastScheduledEnd(now)
+                  ? 'Ended'
+                  : (activity.isLive ? 'Live now' : 'Upcoming'),
+              valueColor: activity.isEnded || activity.isPastScheduledEnd(now)
+                  ? p.textMuted
+                  : (activity.isLive ? p.liveAccent : p.upcomingBlue),
             ),
             const SizedBox(height: 12),
             ActivityDetailRow(
@@ -243,6 +256,17 @@ class ActivityDetailsSummaryCard extends StatelessWidget {
               label: 'Starts',
               value: '$schedule · $relative',
             ),
+            if (endsSchedule != null && endsRelative != null) ...[
+              const SizedBox(height: 12),
+              ActivityDetailRow(
+                icon: Icons.timer_off_outlined,
+                label: 'Ends',
+                value: '$endsSchedule · $endsRelative',
+                valueColor: activity.isPastScheduledEnd(now)
+                    ? p.textMuted
+                    : null,
+              ),
+            ],
             const SizedBox(height: 12),
             ActivityDetailRow(
               icon: Icons.place_outlined,

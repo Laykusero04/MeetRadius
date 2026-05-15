@@ -1,25 +1,97 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/discovery/discovery_anchor_service.dart';
 import '../../../core/theme/meet_radius_palette.dart';
+import '../../settings/domain/user_settings.dart';
+import '../../activity/data/sync_due_hosted_activities.dart';
 import '../../activity/data/watch_activities.dart';
 import '../../activity/domain/activity.dart';
 import '../../activity/presentation/feed_activity_detail_screen.dart';
+import '../../settings/application/settings_cubit.dart';
 import '../data/activity_geo.dart';
 
 /// Map pins from Firestore `activities` (see [watchActivities]).
-class ActivityMapScreen extends StatelessWidget {
+class ActivityMapScreen extends StatefulWidget {
   const ActivityMapScreen({super.key});
+
+  @override
+  State<ActivityMapScreen> createState() => _ActivityMapScreenState();
+}
+
+class _ActivityMapScreenState extends State<ActivityMapScreen> {
+  late Future<LatLng> _anchorFuture;
+  String? _lastDueSyncKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshAnchor();
+  }
+
+  void _refreshAnchor() {
+    _anchorFuture = context.read<SettingsCubit>().resolveDiscoveryAnchor();
+  }
+
+  void _maybeSyncDueActivities(List<Activity> all) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final ids = all
+        .where((a) => a.hostUid == uid && a.isPastScheduledEnd() && !a.isEnded)
+        .map((a) => a.id)
+        .toList()
+      ..sort();
+    if (ids.isEmpty) return;
+    final key = ids.join(',');
+    if (key == _lastDueSyncKey) return;
+    _lastDueSyncKey = key;
+    syncDueHostedActivitiesFromList(all);
+  }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final usingGps = context.watch<SettingsCubit>().state.useGpsForDiscovery;
 
-    return StreamBuilder<List<Activity>>(
-      stream: watchActivities(),
-      builder: (context, snap) {
-        final activities = snap.data ?? const <Activity>[];
+    return BlocListener<SettingsCubit, UserSettings>(
+      listenWhen: (prev, next) =>
+          prev.useGpsForDiscovery != next.useGpsForDiscovery ||
+          prev.discoveryAnchorEpoch != next.discoveryAnchorEpoch,
+      listener: (_, __) => setState(_refreshAnchor),
+      child: FutureBuilder<LatLng>(
+        future: _anchorFuture,
+        builder: (context, anchorSnap) {
+          final candidate = anchorSnap.data ?? ActivityGeo.davaoAreaCenter;
+
+          return StreamBuilder<List<Activity>>(
+            stream: watchActivities(),
+            builder: (context, snap) {
+              final raw = snap.data ?? const <Activity>[];
+              _maybeSyncDueActivities(raw);
+              final regional = ActivityGeo.davaoAreaCenter;
+              int inRadiusCount(LatLng a) =>
+                  raw.where((x) => activityWithinDiscoveryRadius(x, a)).length;
+              final anchor = applyRegionalDiscoveryFallback(
+                candidate: candidate,
+                allowFallback: usingGps,
+                candidateShowsActivities: inRadiusCount(candidate) > 0,
+                regionalShowsActivities: inRadiusCount(regional) > 0,
+              );
+              final regionalFallback =
+                  usingGps &&
+                  anchor.latitude == regional.latitude &&
+                  anchor.longitude == regional.longitude;
+              final header = discoveryAreaHeaderLabel(
+                anchor: anchor,
+                usingGps: usingGps,
+                usingRegionalFallback: regionalFallback,
+              );
+              final activities = raw
+                  .where((a) => activityWithinDiscoveryRadius(a, anchor))
+                  .toList();
         final liveCount = activities.where((a) => a.isLive).length;
         final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -27,7 +99,7 @@ class ActivityMapScreen extends StatelessWidget {
       children: [
         FlutterMap(
           options: MapOptions(
-            initialCenter: ActivityGeo.davaoAreaCenter,
+            initialCenter: anchor,
             initialZoom: 11.4,
             minZoom: 9,
             maxZoom: 18,
@@ -85,7 +157,7 @@ class ActivityMapScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'Davao City · 15 mi',
+                      header,
                       style: textTheme.titleSmall?.copyWith(
                         color: context.palette.textPrimary,
                         fontWeight: FontWeight.w600,
@@ -128,7 +200,10 @@ class ActivityMapScreen extends StatelessWidget {
         ),
       ],
     );
-      },
+            },
+          );
+        },
+      ),
     );
   }
 

@@ -73,7 +73,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       nav.popUntil((route) => route.isFirst);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(messageForAuthException(e))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(messageForAuthException(e))),
+      );
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -119,16 +121,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Create an account to discover activities near you.',
-                  style: textTheme.bodyMedium?.copyWith(color: context.palette.textSecondary),
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: context.palette.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 28),
                 TextFormField(
                   controller: _firstNameController,
                   textCapitalization: TextCapitalization.words,
                   autofillHints: const [AutofillHints.givenName],
-                  decoration: RegisterScreen.fieldDecoration(context, 'First name'),
+                  decoration: RegisterScreen.fieldDecoration(
+                    context,
+                    'First name',
+                  ),
                   validator: (value) {
-                    if ((value?.trim() ?? '').isEmpty) return 'Enter your first name';
+                    if ((value?.trim() ?? '').isEmpty)
+                      return 'Enter your first name';
                     return null;
                   },
                 ),
@@ -137,9 +145,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _lastNameController,
                   textCapitalization: TextCapitalization.words,
                   autofillHints: const [AutofillHints.familyName],
-                  decoration: RegisterScreen.fieldDecoration(context, 'Last name'),
+                  decoration: RegisterScreen.fieldDecoration(
+                    context,
+                    'Last name',
+                  ),
                   validator: (value) {
-                    if ((value?.trim() ?? '').isEmpty) return 'Enter your last name';
+                    if ((value?.trim() ?? '').isEmpty)
+                      return 'Enter your last name';
                     return null;
                   },
                 ),
@@ -161,18 +173,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   autofillHints: const [AutofillHints.newPassword],
-                  decoration: RegisterScreen.fieldDecoration(context, 'Password').copyWith(
-                    suffixIcon: IconButton(
-                      tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                      onPressed: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
-                      icon: Icon(
-                        _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        color: context.palette.textMuted,
+                  decoration:
+                      RegisterScreen.fieldDecoration(
+                        context,
+                        'Password',
+                      ).copyWith(
+                        suffixIcon: IconButton(
+                          tooltip: _obscurePassword
+                              ? 'Show password'
+                              : 'Hide password',
+                          onPressed: () {
+                            setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            );
+                          },
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            color: context.palette.textMuted,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
                   validator: (value) {
                     final v = value ?? '';
                     if (v.isEmpty) return 'Choose a password';
@@ -185,21 +207,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _confirmPasswordController,
                   obscureText: _obscureConfirm,
                   autofillHints: const [AutofillHints.newPassword],
-                  decoration: RegisterScreen.fieldDecoration(context, 'Confirm password').copyWith(
-                    suffixIcon: IconButton(
-                      tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
-                      onPressed: () {
-                        setState(() => _obscureConfirm = !_obscureConfirm);
-                      },
-                      icon: Icon(
-                        _obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        color: context.palette.textMuted,
+                  decoration:
+                      RegisterScreen.fieldDecoration(
+                        context,
+                        'Confirm password',
+                      ).copyWith(
+                        suffixIcon: IconButton(
+                          tooltip: _obscureConfirm
+                              ? 'Show password'
+                              : 'Hide password',
+                          onPressed: () {
+                            setState(() => _obscureConfirm = !_obscureConfirm);
+                          },
+                          icon: Icon(
+                            _obscureConfirm
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            color: context.palette.textMuted,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
                   validator: (value) {
                     if ((value ?? '').isEmpty) return 'Confirm your password';
-                    if (value != _passwordController.text) return 'Passwords do not match';
+                    if (value != _passwordController.text)
+                      return 'Passwords do not match';
                     return null;
                   },
                 ),
@@ -220,15 +251,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 28),
                 Row(
                   children: [
-                    Expanded(child: Divider(color: context.palette.cardBorderSubtle)),
+                    Expanded(
+                      child: Divider(color: context.palette.cardBorderSubtle),
+                    ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
                         'or continue with',
-                        style: textTheme.bodySmall?.copyWith(color: context.palette.textMuted),
+                        style: textTheme.bodySmall?.copyWith(
+                          color: context.palette.textMuted,
+                        ),
                       ),
                     ),
-                    Expanded(child: Divider(color: context.palette.cardBorderSubtle)),
+                    Expanded(
+                      child: Divider(color: context.palette.cardBorderSubtle),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -242,7 +279,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           foregroundColor: context.palette.textPrimary,
-                          side: BorderSide(color: context.palette.cardBorderSubtle),
+                          side: BorderSide(
+                            color: context.palette.cardBorderSubtle,
+                          ),
                         ),
                         child: Text('Google', style: textTheme.labelLarge),
                       ),
@@ -256,7 +295,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           foregroundColor: context.palette.textPrimary,
-                          side: BorderSide(color: context.palette.cardBorderSubtle),
+                          side: BorderSide(
+                            color: context.palette.cardBorderSubtle,
+                          ),
                         ),
                         child: Text('Facebook', style: textTheme.labelLarge),
                       ),
@@ -269,7 +310,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     Text(
                       'Already have an account?',
-                      style: textTheme.bodyMedium?.copyWith(color: context.palette.textSecondary),
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: context.palette.textSecondary,
+                      ),
                     ),
                     TextButton(
                       onPressed: () => Navigator.of(context).maybePop(),

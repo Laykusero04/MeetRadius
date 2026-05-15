@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../social/data/search_users_by_name.dart';
+
 /// Creates a Firebase Auth account, sets [User.displayName], and writes `users/{uid}` in Firestore.
 Future<void> registerUserWithProfile({
   required String email,
@@ -37,6 +39,10 @@ Future<void> registerUserWithProfile({
       'email': normalizedEmail,
       'firstName': trimmedFirst,
       'lastName': trimmedLast,
+      'searchNameLower': buildSearchNameLower(trimmedFirst, trimmedLast),
+      'notifyChat': true,
+      'notifyActivity': true,
+      'notifyLiveNearby': true,
       'createdAt': FieldValue.serverTimestamp(),
     });
   } catch (e) {

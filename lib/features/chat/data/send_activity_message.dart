@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../notifications/data/create_notification.dart';
 import '../domain/chat_message.dart' show ChatReplySnapshot, kChatEventKindMemberLeft;
 
 /// Subcollection message fields plus [lastMessagePreview] for the activity doc.
@@ -86,4 +87,32 @@ Future<void> sendActivityMessage({
   );
 
   await batch.commit();
+
+  final activitySnap = await FirebaseFirestore.instance
+      .collection('activities')
+      .doc(activityId)
+      .get();
+  if (!activitySnap.exists) return;
+  final data = activitySnap.data()!;
+  final members = List<String>.from(
+    (data['memberIds'] as List<dynamic>?)?.map((e) => e.toString()) ?? const [],
+  );
+  final title = (data['title'] as String?)?.trim();
+  final activityTitle =
+      title != null && title.isNotEmpty ? title : 'Activity';
+  final senderName = user.displayName?.trim().isNotEmpty == true
+      ? user.displayName!.trim()
+      : 'Someone';
+  var preview = trimmed;
+  if (preview.length > 60) preview = '${preview.substring(0, 60)}…';
+
+  await notifyActivityMembers(
+    activityId: activityId,
+    activityTitle: activityTitle,
+    memberIds: members,
+    type: 'chat',
+    body: '$senderName: $preview',
+    excludeUid: user.uid,
+    openChat: true,
+  );
 }

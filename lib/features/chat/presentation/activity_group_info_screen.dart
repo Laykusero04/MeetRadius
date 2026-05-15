@@ -8,6 +8,10 @@ import '../../activity/presentation/activity_members_screen.dart';
 import '../../activity/presentation/host_activity_actions_sheet.dart';
 import '../../activity/presentation/widgets/activity_detail_sections.dart';
 import '../../activity/presentation/widgets/activity_location_preview_card.dart';
+import '../../safety/data/block_user.dart';
+import '../../safety/presentation/report_activity_dialog.dart';
+import '../data/mute_activity_chat.dart';
+import '../data/user_chat_prefs.dart';
 
 /// Opens [ActivityGroupInfoScreen] from chat (report / mute / members).
 void openActivityGroupInfo(
@@ -111,6 +115,7 @@ class _ActivityGroupInfoBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = palette;
+    final self = FirebaseAuth.instance.currentUser?.uid;
     if (snap.hasError) {
       return Center(
         child: Padding(
@@ -202,37 +207,145 @@ class _ActivityGroupInfoBody extends StatelessWidget {
           },
         ),
         const SizedBox(height: 10),
-        ActivityOutlineNavRow(
-          icon: Icons.flag_outlined,
-          title: 'Report conversation',
-          subtitle: 'Tell us if something is wrong',
-          accent: p.textSecondary,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Report is not wired yet — thanks for your patience.',
-                ),
-                behavior: SnackBarBehavior.floating,
-              ),
+        StreamBuilder<UserChatPrefs>(
+          stream: watchUserChatPrefs(),
+          builder: (context, prefsSnap) {
+            final muted =
+                prefsSnap.data?.isActivityMuted(activityId) ?? false;
+            return ActivityOutlineNavRow(
+              icon: muted ? Icons.notifications_off_outlined : Icons.notifications_outlined,
+              title: muted ? 'Unmute notifications' : 'Mute notifications',
+              subtitle: muted
+                  ? 'You will get chat alerts for this thread again'
+                  : 'Stop in-app alerts for new messages in this chat',
+              accent: p.textSecondary,
+              onTap: () async {
+                try {
+                  await setActivityChatMuted(
+                    activityId: activityId,
+                    muted: !muted,
+                  );
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        muted
+                            ? 'Chat notifications unmuted.'
+                            : 'Chat notifications muted for this activity.',
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('$e')),
+                  );
+                }
+              },
             );
           },
         ),
         const SizedBox(height: 10),
         ActivityOutlineNavRow(
-          icon: Icons.notifications_off_outlined,
-          title: 'Mute notifications',
-          subtitle: 'Quiet this chat in the app',
+          icon: Icons.flag_outlined,
+          title: 'Report activity',
+          subtitle: 'Send to our review team',
           accent: p.textSecondary,
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Mute is not wired yet — coming later.'),
-                behavior: SnackBarBehavior.floating,
-              ),
+            showReportActivityDialog(
+              context,
+              activityId: activityId,
+              reportedUserUid: activity.hostUid,
             );
           },
         ),
+        if (self != null &&
+            activity.hostUid.isNotEmpty &&
+            self != activity.hostUid) ...[
+          const SizedBox(height: 10),
+          ActivityOutlineNavRow(
+            icon: Icons.person_off_outlined,
+            title: 'Report host',
+            subtitle: 'Flag this person to our review team',
+            accent: p.textSecondary,
+            onTap: () {
+              showReportActivityDialog(
+                context,
+                activityId: activityId,
+                reportedUserUid: activity.hostUid,
+              );
+            },
+          ),
+        ],
+        if (self != null &&
+            activity.hostUid.isNotEmpty &&
+            self != activity.hostUid) ...[
+          const SizedBox(height: 10),
+          ActivityOutlineNavRow(
+            icon: Icons.block_outlined,
+            title: 'Block host',
+            subtitle: 'Hide their activities from your feed',
+            accent: p.textSecondary,
+            onTap: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (dialogCtx) {
+                  return AlertDialog(
+                    backgroundColor: p.card,
+                    title: Text(
+                      'Block this host?',
+                      style: TextStyle(
+                        color: p.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    content: Text(
+                      'You will not see activities they host. You can unblock later in Settings.',
+                      style: TextStyle(color: p.textSecondary, height: 1.4),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogCtx, false),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(color: p.textSecondary),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogCtx, true),
+                        child: Text(
+                          'Block',
+                          style: TextStyle(
+                            color: p.liveAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+              if (ok != true || !context.mounted) return;
+              try {
+                await blockUser(activity.hostUid);
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Host blocked.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                Navigator.of(context).pop();
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('$e')),
+                );
+              }
+            },
+          ),
+        ],
       ],
     );
   }

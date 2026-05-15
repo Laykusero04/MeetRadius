@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Stored in Firestore on `messages` docs as `eventKind`.
 const String kChatEventKindMemberLeft = 'member_left';
+const String kChatEventKindActivityEnded = 'activity_ended';
+const String kChatEventKindMemberJoined = 'member_joined';
+const String kChatEventKindMemberCheckedIn = 'member_checked_in';
 
 /// Snapshot of a message being replied to (stored on the new message doc).
 class ChatReplySnapshot {
@@ -58,6 +61,12 @@ class ChatMessage {
   final String? replyToSenderDisplayName;
 
   bool get isMemberLeftEvent => eventKind == kChatEventKindMemberLeft;
+
+  bool get isSystemEvent =>
+      eventKind == kChatEventKindMemberLeft ||
+      eventKind == kChatEventKindActivityEnded ||
+      eventKind == kChatEventKindMemberJoined ||
+      eventKind == kChatEventKindMemberCheckedIn;
 
   bool get hasReply =>
       replyToMessageId != null &&

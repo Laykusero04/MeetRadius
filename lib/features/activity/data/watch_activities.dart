@@ -19,6 +19,6 @@ Stream<List<Activity>> watchActivities() {
         // Skip malformed docs.
       }
     }
-    return out;
+    return out.where((a) => a.isDiscoverable).toList();
   });
 }

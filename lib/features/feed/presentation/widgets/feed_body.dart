@@ -1,17 +1,31 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../../core/theme/meet_radius_palette.dart';
-import '../../../activity/data/join_activity.dart';
-import '../../../activity/data/leave_activity.dart';
+import '../../../activity/data/sync_due_hosted_activities.dart'
+    show syncDueHostedActivities, syncDueHostedActivitiesFromList;
 import '../../../activity/data/watch_activities.dart';
+import '../../../safety/data/block_user.dart';
+import '../../../safety/data/filter_blocked_activities.dart';
 import '../../../activity/domain/activity.dart';
 import '../../../activity/domain/activity_capacity_labels.dart';
+import '../../../activity/domain/activity_membership.dart';
+import '../../../activity/presentation/activity_actions.dart';
+import '../../../../core/discovery/discovery_anchor_service.dart';
+import '../../../profile/data/fetch_public_user_profile.dart';
+import '../../../profile/domain/user_profile.dart';
+import '../../../settings/application/settings_cubit.dart';
+import '../../../settings/domain/user_settings.dart';
+import '../../../social/data/follow_user.dart';
+import '../../../social/domain/friends_attending.dart';
 import '../../../activity/presentation/host_activity_actions_sheet.dart';
 import '../../../activity/presentation/feed_activity_detail_screen.dart';
+import '../../../map/data/activity_geo.dart';
 import '../../application/feed_filter_cubit.dart';
 import 'activity_feed_labels.dart';
+import 'feed_location_empty_hint.dart';
 import 'live_activity_card.dart';
 import 'upcoming_activity_card.dart';
 
@@ -29,105 +43,365 @@ class FeedBody extends StatefulWidget {
 class _FeedBodyState extends State<FeedBody> {
   /// 0 = live, 1 = upcoming
   int _section = 0;
+  late Future<LatLng> _anchorFuture;
+  String? _lastDueSyncKey;
+
+  /// Avoids feed emptying when GPS resolves far from seeded activities (common on iOS).
+  LatLng? _feedAnchor;
+
+  Map<String, UserProfile?> _friendProfiles = const {};
+  String? _friendProfilesRequestKey;
+
+  bool _anchorUsedRegionalFallback = false;
+
+  @override
+  void initState() {
+    super.initState();
+    syncDueHostedActivities();
+    _refreshAnchor();
+  }
+
+  void _refreshAnchor() {
+    _feedAnchor = null;
+    final cubit = context.read<SettingsCubit>();
+    _anchorFuture = cubit.resolveDiscoveryAnchor();
+  }
+
+  int _countInRadius(List<Activity> all, LatLng anchor) =>
+      all.where((a) => activityWithinDiscoveryRadius(a, anchor)).length;
+
+  /// Picks GPS unless it hides everything while the MVP region still has activities.
+  LatLng _commitFeedAnchor(
+    LatLng candidate,
+    List<Activity> all, {
+    required bool useGpsForDiscovery,
+  }) {
+    int countFor(LatLng anchor) => _countInRadius(all, anchor);
+
+    final regional = ActivityGeo.davaoAreaCenter;
+    final chosen = applyRegionalDiscoveryFallback(
+      candidate: candidate,
+      allowFallback: useGpsForDiscovery,
+      candidateShowsActivities: countFor(candidate) > 0,
+      regionalShowsActivities: countFor(regional) > 0,
+    );
+    _anchorUsedRegionalFallback =
+        useGpsForDiscovery &&
+        chosen.latitude == regional.latitude &&
+        chosen.longitude == regional.longitude &&
+        (candidate.latitude != regional.latitude ||
+            candidate.longitude != regional.longitude);
+
+    if (_feedAnchor == null) {
+      _feedAnchor = chosen;
+      return chosen;
+    }
+    final prev = _feedAnchor!;
+    if (chosen.latitude == prev.latitude && chosen.longitude == prev.longitude) {
+      return prev;
+    }
+    final oldCount = countFor(prev);
+    final newCount = countFor(chosen);
+    if (newCount >= oldCount) {
+      _feedAnchor = chosen;
+      return chosen;
+    }
+    return prev;
+  }
+
+  double? _nearestActivityMiles(List<Activity> all, LatLng anchor) {
+    double? nearest;
+    for (final a in all) {
+      final miles = distanceToAnchorMiles(a, anchor);
+      if (miles == null) continue;
+      nearest = nearest == null ? miles : (miles < nearest ? miles : nearest);
+    }
+    return nearest;
+  }
+
+  void _scheduleFriendProfiles(Set<String> uids) {
+    final key = uids.join('|');
+    if (key == _friendProfilesRequestKey) return;
+    _friendProfilesRequestKey = key;
+    if (uids.isEmpty) {
+      if (_friendProfiles.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _friendProfilesRequestKey != key) return;
+          setState(() => _friendProfiles = const {});
+        });
+      }
+      return;
+    }
+    fetchPublicUserProfiles(uids).then((profiles) {
+      if (!mounted || _friendProfilesRequestKey != key) return;
+      setState(() => _friendProfiles = profiles);
+    });
+  }
+
+  void _maybeSyncDueActivities(List<Activity> all) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final ids =
+        all
+            .where(
+              (a) => a.hostUid == uid && a.isPastScheduledEnd() && !a.isEnded,
+            )
+            .map((a) => a.id)
+            .toList()
+          ..sort();
+    if (ids.isEmpty) return;
+    final key = ids.join(',');
+    if (key == _lastDueSyncKey) return;
+    _lastDueSyncKey = key;
+    syncDueHostedActivitiesFromList(all);
+  }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return BlocBuilder<FeedFilterCubit, ({int chipIndex})>(
-      builder: (context, filter) {
-        return StreamBuilder<List<Activity>>(
-          stream: watchActivities(),
-          builder: (context, listSnap) {
-            if (listSnap.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'Could not load activities.\n${listSnap.error}',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: context.palette.textSecondary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              );
-            }
-
-            final all = listSnap.data ?? const <Activity>[];
-            final filtered =
-                all.where((a) => a.matchesFeedChip(filter.chipIndex)).toList();
-            final live = filtered.where((a) => a.isLive).toList();
-            final upcoming = filtered.where((a) => !a.isLive).toList();
-            final now = DateTime.now();
-            final loading = listSnap.connectionState == ConnectionState.waiting &&
-                all.isEmpty;
-
-            final p = context.palette;
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _CategoryChips(
-                  selectedIndex: filter.chipIndex,
-                  onSelect: context.read<FeedFilterCubit>().selectChip,
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                  child: _FeedSectionTabs(
-                    selected: _section,
-                    onSelect: (i) => setState(() => _section = i),
-                    liveCount: live.length,
-                    upcomingCount: upcoming.length,
-                  ),
-                ),
-                Expanded(
-                  child: loading
-                      ? Center(
-                          child: SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: p.liveAccent,
+    return BlocListener<SettingsCubit, UserSettings>(
+      listenWhen: (prev, next) =>
+          prev.useGpsForDiscovery != next.useGpsForDiscovery ||
+          prev.discoveryAnchorEpoch != next.discoveryAnchorEpoch,
+      listener: (_, __) {
+        setState(_refreshAnchor);
+      },
+      child: BlocBuilder<FeedFilterCubit, ({int chipIndex})>(
+        builder: (context, filter) {
+          return FutureBuilder<LatLng>(
+            future: _anchorFuture,
+            builder: (context, anchorSnap) {
+              final settingsCubit = context.read<SettingsCubit>();
+              final usingGps = settingsCubit.state.useGpsForDiscovery;
+              final resolvedAnchor = anchorSnap.data;
+              return StreamBuilder<List<String>>(
+                stream: watchBlockedUserIds(),
+                builder: (context, blockedSnap) {
+                  final blocked = blockedSnap.data ?? const <String>[];
+                  return StreamBuilder<List<Activity>>(
+                    stream: watchActivities(),
+                    builder: (context, listSnap) {
+                      if (listSnap.hasError) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              'Could not load activities.\n${listSnap.error}',
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: context.palette.textSecondary,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
                           ),
-                        )
-                      : RefreshIndicator(
-                          color: p.liveAccent,
-                          onRefresh: () async {
-                            await Future<void>.delayed(
-                              const Duration(milliseconds: 400),
-                            );
-                          },
-                          child: ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 88),
-                            children: [
-                              if (_section == 0)
-                                ..._buildLiveSectionChildren(
-                                  context,
-                                  live,
-                                  now,
-                                  textTheme,
-                                  p,
-                                )
-                              else
-                                ..._buildUpcomingChildren(
-                                  context,
-                                  upcoming,
-                                  textTheme,
-                                  p,
-                                ),
-                            ],
-                          ),
-                        ),
-                ),
-              ],
-            );
-          },
-        );
-      },
+                        );
+                      }
+
+                      final rawFromFirestore =
+                          listSnap.data ?? const <Activity>[];
+                      final all = filterBlockedActivities(
+                        rawFromFirestore,
+                        blocked,
+                      );
+                      _maybeSyncDueActivities(all);
+                      final savedAnchor =
+                          settingsCubit.repository.loadDiscoveryAnchor();
+                      final candidateAnchor =
+                          resolvedAnchor ?? savedAnchor;
+                      final anchor = _commitFeedAnchor(
+                        candidateAnchor,
+                        all,
+                        useGpsForDiscovery: usingGps,
+                      );
+                      final inRadius = all
+                          .where(
+                            (a) => activityWithinDiscoveryRadius(a, anchor),
+                          )
+                          .toList();
+                      final allOutsideRadius =
+                          all.isNotEmpty && inRadius.isEmpty;
+                      final nearestMiles = allOutsideRadius
+                          ? _nearestActivityMiles(all, candidateAnchor)
+                          : null;
+                      final filtered = inRadius
+                          .where((a) => a.matchesFeedChip(filter.chipIndex))
+                          .toList();
+                      final live = sortActivitiesForFeed(
+                        filtered.where((a) => a.isLive).toList(),
+                        anchor,
+                      );
+                      final upcoming = sortActivitiesForFeed(
+                        filtered.where((a) => !a.isLive).toList(),
+                        anchor,
+                      );
+                      final now = DateTime.now();
+                      final loading = !listSnap.hasData &&
+                          listSnap.connectionState == ConnectionState.waiting;
+
+                      final p = context.palette;
+                      final selfUid = FirebaseAuth.instance.currentUser?.uid;
+
+                      return StreamBuilder<List<String>>(
+                        stream: watchFollowingIds(),
+                        builder: (context, followingSnap) {
+                          final following = followingIdsSet(
+                            followingSnap.data ?? const [],
+                          );
+                          final friendUids = friendUidsOnActivities(
+                            [...live, ...upcoming],
+                            following,
+                          );
+                          _scheduleFriendProfiles(friendUids);
+                          final friendProfiles = _friendProfiles;
+
+                          return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      20,
+                                      8,
+                                      20,
+                                      0,
+                                    ),
+                                    child: Text(
+                                      discoveryAreaHeaderLabel(
+                                        anchor: anchor,
+                                        usingGps: usingGps,
+                                        usingRegionalFallback:
+                                            _anchorUsedRegionalFallback,
+                                      ),
+                                      style: textTheme.titleSmall?.copyWith(
+                                        color: p.textPrimary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_anchorUsedRegionalFallback)
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        20,
+                                        0,
+                                        20,
+                                        4,
+                                      ),
+                                      child: Text(
+                                        'GPS is far from local activities — showing ${kDefaultDiscoveryAreaLabel} area',
+                                        style: textTheme.bodySmall?.copyWith(
+                                          color: p.liveAccent,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  _CategoryChips(
+                                    selectedIndex: filter.chipIndex,
+                                    onSelect: context
+                                        .read<FeedFilterCubit>()
+                                        .selectChip,
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      20,
+                                      10,
+                                      20,
+                                      16,
+                                    ),
+                                    child: _FeedSectionTabs(
+                                      selected: _section,
+                                      onSelect: (i) =>
+                                          setState(() => _section = i),
+                                      liveCount: live.length,
+                                      upcomingCount: upcoming.length,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: loading
+                                        ? Center(
+                                            child: SizedBox(
+                                              width: 28,
+                                              height: 28,
+                                              child:
+                                                  CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: p.liveAccent,
+                                              ),
+                                            ),
+                                          )
+                                        : RefreshIndicator(
+                                            color: p.liveAccent,
+                                            onRefresh: () async {
+                                              await Future<void>.delayed(
+                                                const Duration(
+                                                  milliseconds: 400,
+                                                ),
+                                              );
+                                            },
+                                            child: ListView(
+                                              physics:
+                                                  const AlwaysScrollableScrollPhysics(),
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                20,
+                                                6,
+                                                20,
+                                                88,
+                                              ),
+                                              children: [
+                                                if (_section == 0)
+                                                  ..._buildLiveSectionChildren(
+                                                    context,
+                                                    live,
+                                                    now,
+                                                    textTheme,
+                                                    p,
+                                                    anchor,
+                                                    followingIds: following,
+                                                    friendProfiles:
+                                                        friendProfiles,
+                                                    selfUid: selfUid,
+                                                    allOutsideRadius:
+                                                        allOutsideRadius,
+                                                    totalActivityCount:
+                                                        all.length,
+                                                    nearestMiles: nearestMiles,
+                                                    usedRegionalFallback:
+                                                        _anchorUsedRegionalFallback,
+                                                  )
+                                                else
+                                                  ..._buildUpcomingChildren(
+                                                    context,
+                                                    upcoming,
+                                                    textTheme,
+                                                    p,
+                                                    anchor,
+                                                    followingIds: following,
+                                                    friendProfiles:
+                                                        friendProfiles,
+                                                    selfUid: selfUid,
+                                                    allOutsideRadius:
+                                                        allOutsideRadius,
+                                                    totalActivityCount:
+                                                        all.length,
+                                                    nearestMiles: nearestMiles,
+                                                    usedRegionalFallback:
+                                                        _anchorUsedRegionalFallback,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                  ),
+                                ],
+                              );
+                        },
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -137,8 +411,25 @@ class _FeedBodyState extends State<FeedBody> {
     DateTime now,
     TextTheme textTheme,
     MeetRadiusPalette p,
-  ) {
+    LatLng anchor, {
+    required Set<String> followingIds,
+    required Map<String, UserProfile?> friendProfiles,
+    String? selfUid,
+    required bool allOutsideRadius,
+    required int totalActivityCount,
+    required double? nearestMiles,
+    required bool usedRegionalFallback,
+  }) {
     if (live.isEmpty) {
+      if (allOutsideRadius && totalActivityCount > 0) {
+        return [
+          FeedLocationEmptyHint(
+            activityCount: totalActivityCount,
+            nearestMiles: nearestMiles,
+            usedRegionalFallback: usedRegionalFallback,
+          ),
+        ];
+      }
       return [
         Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 16),
@@ -155,8 +446,11 @@ class _FeedBodyState extends State<FeedBody> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.local_fire_department_outlined,
-                          color: p.liveAccent, size: 22),
+                      Icon(
+                        Icons.local_fire_department_outlined,
+                        color: p.liveAccent,
+                        size: 22,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Nothing live right now',
@@ -191,11 +485,21 @@ class _FeedBodyState extends State<FeedBody> {
             title: live[i].title,
             category: live[i].category,
             startsIn: activityStartsInLine(live[i].startsAt, now),
-            distance: live[i].spot.isEmpty ? 'Nearby' : live[i].spot,
+            distance: activityDistanceDetailLine(live[i], anchor),
             joinedLabel: activityLiveJoinedLabel(live[i]),
             socialLine: '',
-            friendInitials: const [],
-            friendNamesLine: null,
+            friendInitials: _friendsDisplay(
+              live[i],
+              followingIds,
+              friendProfiles,
+              selfUid,
+            ).initials,
+            friendNamesLine: _friendsDisplay(
+              live[i],
+              followingIds,
+              friendProfiles,
+              selfUid,
+            ).namesLine,
             joinButtonLabel: _joinLabel(live[i]),
             joinEnabled: _joinEnabled(live[i]),
             isLeaveAction: _isMemberNotHost(live[i]),
@@ -203,8 +507,8 @@ class _FeedBodyState extends State<FeedBody> {
                 FirebaseAuth.instance.currentUser?.uid == live[i].hostUid,
             onManageOwn:
                 FirebaseAuth.instance.currentUser?.uid == live[i].hostUid
-                    ? () => showHostActivityActionsSheet(context, live[i])
-                    : null,
+                ? () => showHostActivityActionsSheet(context, live[i])
+                : null,
             onTapActivity: () => openFeedActivityDetail(
               context,
               activityId: live[i].id,
@@ -222,8 +526,25 @@ class _FeedBodyState extends State<FeedBody> {
     List<Activity> upcoming,
     TextTheme textTheme,
     MeetRadiusPalette p,
-  ) {
+    LatLng anchor, {
+    required Set<String> followingIds,
+    required Map<String, UserProfile?> friendProfiles,
+    String? selfUid,
+    required bool allOutsideRadius,
+    required int totalActivityCount,
+    required double? nearestMiles,
+    required bool usedRegionalFallback,
+  }) {
     if (upcoming.isEmpty) {
+      if (allOutsideRadius && totalActivityCount > 0) {
+        return [
+          FeedLocationEmptyHint(
+            activityCount: totalActivityCount,
+            nearestMiles: nearestMiles,
+            usedRegionalFallback: usedRegionalFallback,
+          ),
+        ];
+      }
       return [
         Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 16),
@@ -240,7 +561,11 @@ class _FeedBodyState extends State<FeedBody> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.event_outlined, color: p.upcomingBlue, size: 22),
+                      Icon(
+                        Icons.event_outlined,
+                        color: p.upcomingBlue,
+                        size: 22,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'No upcoming in this filter',
@@ -275,9 +600,14 @@ class _FeedBodyState extends State<FeedBody> {
             schedulePill: activitySchedulePill(upcoming[i].startsAt),
             category: upcoming[i].category,
             title: upcoming[i].title,
-            distance: upcoming[i].spot.isEmpty ? 'Nearby' : upcoming[i].spot,
+            distance: activityDistanceDetailLine(upcoming[i], anchor),
             goingLabel: activityGoingLabel(upcoming[i]),
-            friendsLine: 'Friends going will show here later.',
+            friendsLine: _friendsLine(
+              upcoming[i],
+              followingIds,
+              friendProfiles,
+              selfUid,
+            ),
             joinButtonLabel: _joinLabel(upcoming[i]),
             joinEnabled: _joinEnabled(upcoming[i]),
             isLeaveAction: _isMemberNotHost(upcoming[i]),
@@ -285,9 +615,8 @@ class _FeedBodyState extends State<FeedBody> {
                 FirebaseAuth.instance.currentUser?.uid == upcoming[i].hostUid,
             onManageOwn:
                 FirebaseAuth.instance.currentUser?.uid == upcoming[i].hostUid
-                    ? () =>
-                        showHostActivityActionsSheet(context, upcoming[i])
-                    : null,
+                ? () => showHostActivityActionsSheet(context, upcoming[i])
+                : null,
             onTapActivity: () => openFeedActivityDetail(
               context,
               activityId: upcoming[i].id,
@@ -298,6 +627,35 @@ class _FeedBodyState extends State<FeedBody> {
         ),
       ],
     ];
+  }
+
+  FriendsAttendingDisplay _friendsDisplay(
+    Activity activity,
+    Set<String> followingIds,
+    Map<String, UserProfile?> friendProfiles,
+    String? selfUid,
+  ) {
+    return friendsAttendingForActivity(
+      activity: activity,
+      followingIds: followingIds,
+      profiles: friendProfiles,
+      excludeUid: selfUid,
+    );
+  }
+
+  String _friendsLine(
+    Activity activity,
+    Set<String> followingIds,
+    Map<String, UserProfile?> friendProfiles,
+    String? selfUid,
+  ) {
+    final display = _friendsDisplay(
+      activity,
+      followingIds,
+      friendProfiles,
+      selfUid,
+    );
+    return display.hasLine ? display.namesLine! : '';
   }
 }
 
@@ -395,11 +753,7 @@ class _SegmentButton extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(
-                icon,
-                size: 22,
-                color: selected ? accent : p.textMuted,
-              ),
+              Icon(icon, size: 22, color: selected ? accent : p.textMuted),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -439,61 +793,28 @@ class _SegmentButton extends StatelessWidget {
 }
 
 String _joinLabel(Activity a) {
-  final u = FirebaseAuth.instance.currentUser;
-  if (u != null && u.uid == a.hostUid) return 'Your activity';
-  if (_isMemberNotHost(a)) return 'Leave';
+  if (activityIsHost(a)) return 'Manage';
+  if (activityCanOpenChat(a) && !activityCanLeave(a)) return 'Open chat';
+  if (activityCanLeave(a)) return 'Leave';
   if (activityIsFull(a)) return 'Full';
   return a.isLive ? 'Join now' : 'Join';
 }
 
-bool _isMemberNotHost(Activity a) {
-  final u = FirebaseAuth.instance.currentUser;
-  return u != null && a.memberIds.contains(u.uid) && u.uid != a.hostUid;
-}
+bool _isMemberNotHost(Activity a) => activityCanLeave(a);
 
 bool _joinEnabled(Activity a) {
-  final u = FirebaseAuth.instance.currentUser;
-  if (u != null && u.uid == a.hostUid) return false;
-  if (_isMemberNotHost(a)) return true;
-  if (activityIsFull(a)) return false;
-  return true;
+  if (activityIsHost(a)) return false;
+  if (activityCanLeave(a)) return true;
+  if (activityCanOpenChat(a)) return true;
+  return activityCanJoin(a);
 }
 
 Future<void> _tryJoinActivity(BuildContext context, Activity activity) async {
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) {
-    messenger?.showSnackBar(
-      const SnackBar(content: Text('Sign in to join activities.')),
-    );
+  if (activityCanOpenChat(activity) && !activityCanLeave(activity)) {
+    openActivityHub(context, activity: activity, openChatIfMember: true);
     return;
   }
-  if (user.uid == activity.hostUid) return;
-
-  if (_isMemberNotHost(activity)) {
-    try {
-      await leaveActivity(activity.id);
-      if (!context.mounted) return;
-      messenger?.showSnackBar(
-        const SnackBar(content: Text('You left this activity.')),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      messenger?.showSnackBar(SnackBar(content: Text('$e')));
-    }
-    return;
-  }
-
-  if (activityIsFull(activity)) return;
-
-  try {
-    await joinActivity(activity.id);
-    if (!context.mounted) return;
-    messenger?.showSnackBar(const SnackBar(content: Text("You're in!")));
-  } catch (e) {
-    if (!context.mounted) return;
-    messenger?.showSnackBar(SnackBar(content: Text('$e')));
-  }
+  await performActivityMembershipAction(context, activity);
 }
 
 class _CategoryChips extends StatelessWidget {
@@ -530,7 +851,10 @@ class _CategoryChips extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   constraints: const BoxConstraints(minHeight: 44),
                   decoration: BoxDecoration(
                     color: p.card,

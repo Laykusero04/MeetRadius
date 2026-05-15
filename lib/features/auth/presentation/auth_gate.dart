@@ -2,7 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/meet_radius_palette.dart';
+import '../../activity/presentation/activity_lifecycle_listener.dart';
 import '../../feed/presentation/home_feed_screen.dart';
+import '../../social/presentation/pending_inviter_listener.dart';
 import 'login_screen.dart';
 
 /// Routes to [HomeFeedScreen] when Firebase has a session, otherwise [LoginScreen].
@@ -31,7 +33,11 @@ class AuthGate extends StatelessWidget {
           );
         }
         if (snapshot.data != null) {
-          return const HomeFeedScreen();
+          return const PendingInviterListener(
+            child: ActivityLifecycleListener(
+              child: HomeFeedScreen(),
+            ),
+          );
         }
         return const LoginScreen();
       },

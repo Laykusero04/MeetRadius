@@ -12,6 +12,7 @@ import '../data/delete_activity.dart';
 import '../data/update_activity.dart';
 import '../domain/activity.dart';
 import '../domain/activity_categories.dart';
+import '../domain/activity_schedule.dart';
 
 /// Single-screen edit for an activity the current user hosts.
 class EditActivityScreen extends StatefulWidget {
@@ -31,6 +32,8 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
   late bool _capacityUnlimited;
   late bool _goLive;
   late DateTime _startsAt;
+  late DateTime _endsAt;
+  late bool _hasScheduledEnd;
   bool _busy = false;
   late LatLng _meetingPin;
 
@@ -70,6 +73,8 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
     _typeIndex = idx >= 0 ? idx : kActivityCategoryValues.indexOf('Other');
     _goLive = a.isLive;
     _startsAt = a.startsAt;
+    _hasScheduledEnd = a.endsAt != null && !a.isEnded;
+    _endsAt = a.endsAt ?? defaultEndsAt(a.startsAt);
     _capacityUnlimited = a.capacityUnlimited;
     final floor = _maxCapacityHostFloor;
     _maxCapacity = max(floor, min(_capacityMax, a.capacity)).clamp(
@@ -88,22 +93,15 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
     super.dispose();
   }
 
-  String _startsPickerLabel() {
-    final d = _startsAt;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final dDay = DateTime(d.year, d.month, d.day);
-    final diff = dDay.difference(today).inDays;
-    final dayPart = switch (diff) {
-      0 => 'Today',
-      1 => 'Tomorrow',
-      _ => '${d.month}/${d.day}/${d.year}',
-    };
-    final h24 = d.hour;
-    final hour = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
-    final min = d.minute.toString().padLeft(2, '0');
-    final ampm = h24 >= 12 ? 'PM' : 'AM';
-    return '$dayPart · $hour:$min $ampm';
+  String _startsPickerLabel() => formatActivityDateTimeLabel(_startsAt);
+
+  String _endsPickerLabel() => formatActivityDateTimeLabel(_endsAt);
+
+  void _syncEndsAfterStartsChange() {
+    if (!_hasScheduledEnd) return;
+    if (!_endsAt.isAfter(_startsAt)) {
+      _endsAt = defaultEndsAt(_startsAt);
+    }
   }
 
   Future<void> _pickStarts() async {
@@ -130,6 +128,40 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
 
     setState(() {
       _startsAt = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+      _syncEndsAfterStartsChange();
+    });
+  }
+
+  Future<void> _pickEnds() async {
+    if (_busy || !_hasScheduledEnd || widget.activity.isEnded) return;
+    final first = DateTime(_startsAt.year, _startsAt.month, _startsAt.day);
+    final last = first.add(const Duration(days: 365));
+    var initialDate = DateTime(_endsAt.year, _endsAt.month, _endsAt.day);
+    if (initialDate.isBefore(first)) initialDate = first;
+    if (initialDate.isAfter(last)) initialDate = last;
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: first,
+      lastDate: last,
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_endsAt),
+    );
+    if (pickedTime == null || !mounted) return;
+
+    setState(() {
+      _endsAt = DateTime(
         pickedDate.year,
         pickedDate.month,
         pickedDate.day,
@@ -172,7 +204,12 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
       );
       return;
     }
-    if (!_goLive && !_startsAt.isAfter(DateTime.now())) {
+    final endingLive =
+        widget.activity.isLive && !_goLive && !widget.activity.isEnded;
+    if (!endingLive &&
+        !_goLive &&
+        !widget.activity.isEnded &&
+        !_startsAt.isAfter(DateTime.now())) {
       messenger.showSnackBar(
         const SnackBar(
           content: Text(
@@ -186,6 +223,15 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
       messenger.showSnackBar(
         const SnackBar(content: Text('Sign in to save changes.')),
       );
+      return;
+    }
+    final endErr = validateScheduledEnd(
+      startsAt: _startsAt,
+      endsAt: _hasScheduledEnd ? _endsAt : null,
+      hasScheduledEnd: _hasScheduledEnd,
+    );
+    if (endErr != null) {
+      messenger.showSnackBar(SnackBar(content: Text(endErr)));
       return;
     }
 
@@ -204,6 +250,9 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
         capacityUnlimited: _capacityUnlimited,
         isLive: _goLive,
         startsAt: _startsAt,
+        endsAt: _hasScheduledEnd ? _endsAt : null,
+        clearEndsAt: !_hasScheduledEnd,
+        setEnded: endingLive,
       );
       if (!mounted) return;
       messenger.showSnackBar(
@@ -396,6 +445,44 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
                 label: _startsPickerLabel(),
                 onTap: _busy ? null : _pickStarts,
               ),
+              if (!widget.activity.isEnded) ...[
+                const SizedBox(height: 16),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  value: _hasScheduledEnd,
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(() {
+                            _hasScheduledEnd = v;
+                            if (v) _syncEndsAfterStartsChange();
+                          }),
+                  title: Text(
+                    'Schedule end time',
+                    style: textTheme.titleSmall?.copyWith(
+                      color: p.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Hides from feed and map when time is up.',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: p.textSecondary,
+                    ),
+                  ),
+                  activeThumbColor: p.liveAccent,
+                  activeTrackColor: p.liveAccent.withValues(alpha: 0.35),
+                ),
+                if (_hasScheduledEnd) ...[
+                  const SizedBox(height: 8),
+                  const _EditSectionLabel(text: 'ENDS'),
+                  const SizedBox(height: 8),
+                  _EditPickerRow(
+                    icon: Icons.timer_off_outlined,
+                    label: _endsPickerLabel(),
+                    onTap: _busy ? null : _pickEnds,
+                  ),
+                ],
+              ],
               const SizedBox(height: 20),
               const _EditSectionLabel(text: 'MEETING SPOT'),
               const SizedBox(height: 8),

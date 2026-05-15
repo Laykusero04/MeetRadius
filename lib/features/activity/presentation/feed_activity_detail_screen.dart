@@ -6,6 +6,7 @@ import '../data/watch_activity_by_id.dart';
 import '../domain/activity.dart';
 import 'activity_members_screen.dart';
 import 'host_activity_actions_sheet.dart';
+import 'widgets/activity_detail_action_bar.dart';
 import 'widgets/activity_detail_sections.dart';
 import 'widgets/activity_location_preview_card.dart';
 
@@ -149,49 +150,61 @@ class _FeedActivityDetailBody extends StatelessWidget {
         : activityTitle;
     final now = DateTime.now();
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          displayTitle,
-          maxLines: 4,
-          overflow: TextOverflow.ellipsis,
-          style: textTheme.headlineSmall?.copyWith(
-            color: p.textPrimary,
-            fontWeight: FontWeight.w800,
-            height: 1.2,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          '$count ${count == 1 ? 'person has' : 'people have'} joined',
-          style: textTheme.bodyLarge?.copyWith(
-            color: p.textSecondary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 22),
-        ActivityHostSummaryCard(
-          hostUid: activity.hostUid,
-          hostEmail: activity.hostEmail,
-        ),
-        const SizedBox(height: 16),
-        ActivityDetailsSummaryCard(activity: activity, now: now),
-        const SizedBox(height: 16),
-        ActivityLocationPreviewCard(activity: activity),
-        const SizedBox(height: 20),
-        ActivityOutlineNavRow(
-          icon: Icons.group_outlined,
-          title: 'Who is going',
-          subtitle: 'See everyone in this activity',
-          accent: p.upcomingBlue,
-          onTap: () {
-            Navigator.of(context).push<void>(
-              MaterialPageRoute<void>(
-                builder: (_) => ActivityMembersScreen(activityId: activityId),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            children: [
+              Text(
+                displayTitle,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.headlineSmall?.copyWith(
+                  color: p.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
+                ),
               ),
-            );
-          },
+              const SizedBox(height: 10),
+              Text(
+                '$count ${count == 1 ? 'person has' : 'people have'} joined',
+                style: textTheme.bodyLarge?.copyWith(
+                  color: p.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 22),
+              ActivityHostSummaryCard(
+                hostUid: activity.hostUid,
+                hostEmail: activity.hostEmail,
+              ),
+              const SizedBox(height: 16),
+              ActivityDetailsSummaryCard(activity: activity, now: now),
+              const SizedBox(height: 16),
+              ActivityLocationPreviewCard(activity: activity),
+              const SizedBox(height: 20),
+              ActivityOutlineNavRow(
+                icon: Icons.group_outlined,
+                title: 'Who is going',
+                subtitle: 'See everyone in this activity',
+                accent: p.upcomingBlue,
+                onTap: () {
+                  Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          ActivityMembersScreen(activityId: activityId),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        ActivityDetailActionBar(
+          activity: activity,
+          activityTitle: activityTitle,
         ),
       ],
     );

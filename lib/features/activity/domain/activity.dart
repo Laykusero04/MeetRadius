@@ -12,6 +12,8 @@ class Activity {
     this.capacityUnlimited = false,
     required this.isLive,
     required this.startsAt,
+    this.endsAt,
+    this.endedAt,
     required this.hostUid,
     this.hostEmail,
     this.lastMessagePreview,
@@ -19,6 +21,7 @@ class Activity {
     this.latitude,
     this.longitude,
     this.memberIds = const [],
+    this.checkedInMemberIds = const [],
   });
 
   final String id;
@@ -31,13 +34,33 @@ class Activity {
   final bool capacityUnlimited;
   final bool isLive;
   final DateTime startsAt;
+  /// Optional scheduled stop; host intent (see [endedAt] for actual stop).
+  final DateTime? endsAt;
+  /// When set, the activity is ended and hidden from feed/map discovery.
+  final DateTime? endedAt;
   final String hostUid;
+
+  bool get isEnded => endedAt != null;
+
+  bool isPastScheduledEnd([DateTime? at]) {
+    final e = endsAt;
+    if (e == null || isEnded) return false;
+    return !e.isAfter(at ?? DateTime.now());
+  }
+
+  bool get isOver => isEnded || isPastScheduledEnd();
+
+  /// Visible on feed / map; joins allowed (subject to capacity).
+  bool get isDiscoverable => !isOver;
   final String? hostEmail;
   final String? lastMessagePreview;
   final DateTime? lastMessageAt;
   final double? latitude;
   final double? longitude;
   final List<String> memberIds;
+  final List<String> checkedInMemberIds;
+
+  bool hasCheckedIn(String uid) => checkedInMemberIds.contains(uid);
 
   bool matchesFeedChip(int chipIndex) {
     if (chipIndex <= 0 || chipIndex >= kFeedCategoryLabels.length) return true;

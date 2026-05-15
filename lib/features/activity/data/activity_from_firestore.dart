@@ -14,6 +14,18 @@ Activity activityFromFirestore(String id, Map<String, dynamic> data) {
     lastMessageAt = lastMsg.toDate();
   }
 
+  final ended = data['endedAt'];
+  DateTime? endedAt;
+  if (ended is Timestamp) {
+    endedAt = ended.toDate();
+  }
+
+  final ends = data['endsAt'];
+  DateTime? endsAt;
+  if (ends is Timestamp) {
+    endsAt = ends.toDate();
+  }
+
   return Activity(
     id: id,
     title: (data['title'] as String?) ?? '',
@@ -24,6 +36,8 @@ Activity activityFromFirestore(String id, Map<String, dynamic> data) {
     capacityUnlimited: data['capacityUnlimited'] as bool? ?? false,
     isLive: data['isLive'] as bool? ?? false,
     startsAt: startsAt,
+    endsAt: endsAt,
+    endedAt: endedAt,
     hostUid: (data['hostUid'] as String?) ?? '',
     hostEmail: data['hostEmail'] as String?,
     lastMessagePreview: data['lastMessagePreview'] as String?,
@@ -32,6 +46,11 @@ Activity activityFromFirestore(String id, Map<String, dynamic> data) {
     longitude: (data['longitude'] as num?)?.toDouble(),
     memberIds: List<String>.from(
       (data['memberIds'] as List<dynamic>?)?.map((e) => e.toString()) ?? const [],
+    ),
+    checkedInMemberIds: List<String>.from(
+      (data['checkedInMemberIds'] as List<dynamic>?)
+              ?.map((e) => e.toString()) ??
+          const [],
     ),
   );
 }

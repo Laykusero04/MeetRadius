@@ -16,6 +16,9 @@ Future<void> updateActivity({
   required bool capacityUnlimited,
   required bool isLive,
   required DateTime startsAt,
+  DateTime? endsAt,
+  bool clearEndsAt = false,
+  bool setEnded = false,
 }) async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) {
@@ -41,7 +44,7 @@ Future<void> updateActivity({
         );
       }
     }
-    txn.update(ref, {
+    final update = <String, dynamic>{
       'title': title,
       'spot': spot,
       'latitude': latitude,
@@ -52,6 +55,16 @@ Future<void> updateActivity({
       'isLive': isLive,
       'startsAt': Timestamp.fromDate(startsAt),
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    if (clearEndsAt) {
+      update['endsAt'] = FieldValue.delete();
+    } else if (endsAt != null) {
+      update['endsAt'] = Timestamp.fromDate(endsAt);
+    }
+    if (setEnded) {
+      update['isLive'] = false;
+      update['endedAt'] = FieldValue.serverTimestamp();
+    }
+    txn.update(ref, update);
   });
 }

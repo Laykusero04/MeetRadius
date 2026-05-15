@@ -6,6 +6,7 @@ import '../data/watch_activity_by_id.dart';
 import '../domain/activity.dart';
 import '../../../features/profile/data/fetch_public_user_profile.dart';
 import '../../../features/profile/domain/user_profile.dart';
+import '../../social/presentation/widgets/follow_user_button.dart';
 
 List<String> orderedMemberUids(Activity a) {
   final host = a.hostUid;
@@ -119,7 +120,8 @@ class ActivityMembersScreen extends StatelessWidget {
                   final isHost = uid == activity.hostUid;
                   final isSelf = self != null && uid == self;
                   final profile = profiles[uid];
-                  final title = profile?.displayName ??
+                  final title =
+                      profile?.displayName ??
                       (isHost && (activity.hostEmail ?? '').isNotEmpty
                           ? activity.hostEmail!.split('@').first
                           : 'Member');
@@ -164,8 +166,25 @@ class ActivityMembersScreen extends StatelessWidget {
                                 color: p.textMuted,
                               ),
                             ),
-                      trailing: isHost
-                          ? Container(
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!isSelf && uid.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: FollowUserButton(targetUid: uid),
+                            ),
+                          if (activity.hasCheckedIn(uid))
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Icon(
+                                Icons.check_circle,
+                                color: p.liveAccent,
+                                size: 22,
+                              ),
+                            ),
+                          if (isHost)
+                            Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 4,
@@ -182,8 +201,9 @@ class ActivityMembersScreen extends StatelessWidget {
                                   letterSpacing: 0.6,
                                 ),
                               ),
-                            )
-                          : null,
+                            ),
+                        ],
+                      ),
                     ),
                   );
                 },

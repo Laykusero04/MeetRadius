@@ -5,9 +5,11 @@ import '../../../core/navigation/main_shell_cubit.dart';
 import '../../../core/theme/meet_radius_palette.dart';
 import '../../../shared/widgets/brand_gradient.dart';
 import '../../chat/presentation/chats_hub_screen.dart';
+import '../../chat/presentation/widgets/chats_nav_icon.dart';
 import '../../map/presentation/activity_map_screen.dart';
 import '../../menu/presentation/menu_screen.dart';
 import '../application/feed_filter_cubit.dart';
+import '../../notifications/presentation/notification_app_bar_button.dart';
 import 'notifications_screen.dart';
 import 'widgets/feed_body.dart';
 import 'widgets/feed_create_speed_dial.dart';
@@ -16,7 +18,7 @@ import 'widgets/feed_create_speed_dial.dart';
 class HomeFeedScreen extends StatelessWidget {
   const HomeFeedScreen({super.key});
 
-  static const _titles = ['Feed', 'Map', 'Chats', 'Menu'];
+  static const appBarTitle = 'MeetRadius';
 
   @override
   Widget build(BuildContext context) {
@@ -42,13 +44,12 @@ class _HomeFeedView extends StatelessWidget {
             backgroundColor: p.scaffold,
             foregroundColor: p.textPrimary,
             surfaceTintColor: Colors.transparent,
-            title: Text(
-              HomeFeedScreen._titles[shell.currentIndex],
-              style: const TextStyle(fontWeight: FontWeight.w700),
+            title: const Text(
+              HomeFeedScreen.appBarTitle,
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
             actions: [
-              IconButton(
-                tooltip: 'Notifications',
+              NotificationAppBarButton(
                 onPressed: () {
                   Navigator.of(context).push<void>(
                     MaterialPageRoute<void>(
@@ -56,7 +57,6 @@ class _HomeFeedView extends StatelessWidget {
                     ),
                   );
                 },
-                icon: const Icon(Icons.notifications_outlined),
               ),
             ],
           ),
@@ -75,8 +75,9 @@ class _HomeFeedView extends StatelessWidget {
               ],
             ),
           ),
-          floatingActionButton:
-              shell.currentIndex == 0 ? const FeedCreateSpeedDial() : null,
+          floatingActionButton: shell.currentIndex == 0
+              ? const FeedCreateSpeedDial()
+              : null,
           bottomNavigationBar: Theme(
             data: Theme.of(context).copyWith(
               splashColor: Colors.transparent,
@@ -93,30 +94,30 @@ class _HomeFeedView extends StatelessWidget {
                   ),
                 ),
                 BottomNavigationBar(
-              type: BottomNavigationBarType.fixed,
-              currentIndex: shell.currentIndex,
-              onTap: context.read<MainShellCubit>().selectTab,
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home_outlined),
-                  activeIcon: Icon(Icons.home),
-                  label: 'Feed',
+                  type: BottomNavigationBarType.fixed,
+                  currentIndex: shell.currentIndex,
+                  onTap: context.read<MainShellCubit>().selectTab,
+                  items: [
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.home_outlined),
+                      activeIcon: Icon(Icons.home),
+                      label: 'Feed',
+                    ),
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.map_outlined),
+                      label: 'Map',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: ChatsNavIcon(active: shell.currentIndex == 2),
+                      label: 'Chats',
+                    ),
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.menu),
+                      activeIcon: Icon(Icons.menu_open),
+                      label: 'Menu',
+                    ),
+                  ],
                 ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.map_outlined),
-                  label: 'Map',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.chat_bubble_outline),
-                  label: 'Chats',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.menu),
-                  activeIcon: Icon(Icons.menu_open),
-                  label: 'Menu',
-                ),
-              ],
-            ),
               ],
             ),
           ),

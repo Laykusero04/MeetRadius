@@ -2,11 +2,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/meet_radius_palette.dart';
+import '../../activity/data/watch_activity_by_id.dart';
+import '../../activity/domain/activity.dart';
+import '../../safety/presentation/report_message_dialog.dart';
+import '../data/mark_chat_thread_read.dart';
 import '../data/send_activity_message.dart';
 import '../data/watch_activity_messages.dart';
 import '../domain/chat_message.dart';
 import 'activity_group_info_screen.dart';
 import 'chat_time_labels.dart';
+import 'widgets/chat_check_in_banner.dart';
 
 /// Group chat for one activity (`activities/{id}/messages`).
 class ActivityChatThreadScreen extends StatefulWidget {
@@ -31,10 +36,57 @@ class _ActivityChatThreadScreenState extends State<ActivityChatThreadScreen> {
   ChatMessage? _replyDraft;
 
   @override
+  void initState() {
+    super.initState();
+    markChatThreadRead(widget.activityId);
+  }
+
+  @override
   void dispose() {
     _textCtrl.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  Future<void> _showMessageActions(ChatMessage message) async {
+    if (message.isSystemEvent) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: context.palette.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: const Text('Report message'),
+                onTap: () => Navigator.pop(ctx, 'report'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.reply_outlined),
+                title: const Text('Reply'),
+                onTap: () => Navigator.pop(ctx, 'reply'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'report':
+        await showReportMessageDialog(
+          context,
+          activityId: widget.activityId,
+          message: message,
+        );
+      case 'reply':
+        setState(() => _replyDraft = message);
+    }
   }
 
   void _scrollToEnd() {
@@ -78,33 +130,42 @@ class _ActivityChatThreadScreenState extends State<ActivityChatThreadScreen> {
     final textTheme = Theme.of(context).textTheme;
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    return Scaffold(
-      backgroundColor: context.palette.scaffold,
-      appBar: AppBar(
-        title: Text(
-          widget.activityTitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        backgroundColor: context.palette.scaffold,
-        foregroundColor: context.palette.textPrimary,
-        surfaceTintColor: Colors.transparent,
-        actions: [
-          IconButton(
-            tooltip: 'Group info',
-            icon: const Icon(Icons.info_outline_rounded),
-            onPressed: () => openActivityGroupInfo(
-              context,
-              activityId: widget.activityId,
-              activityTitle: widget.activityTitle,
+    return StreamBuilder<Activity?>(
+      stream: watchActivityById(widget.activityId),
+      builder: (context, activitySnap) {
+        final activity = activitySnap.data;
+        final chatEnded = activity?.isOver ?? false;
+
+        return Scaffold(
+          backgroundColor: context.palette.scaffold,
+          appBar: AppBar(
+            title: Text(
+              widget.activityTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
+            backgroundColor: context.palette.scaffold,
+            foregroundColor: context.palette.textPrimary,
+            surfaceTintColor: Colors.transparent,
+            actions: [
+              IconButton(
+                tooltip: 'Group info',
+                icon: const Icon(Icons.info_outline_rounded),
+                onPressed: () => openActivityGroupInfo(
+                  context,
+                  activityId: widget.activityId,
+                  activityTitle: widget.activityTitle,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: StreamBuilder<List<ChatMessage>>(
+          body: Column(
+            children: [
+              if (chatEnded) const _ActivityEndedChatBanner(),
+              if (activity != null && !chatEnded)
+                ChatCheckInBanner(activity: activity),
+              Expanded(
+                child: StreamBuilder<List<ChatMessage>>(
               stream: watchActivityMessages(widget.activityId),
               builder: (context, snap) {
                 if (snap.hasError) {
@@ -151,7 +212,7 @@ class _ActivityChatThreadScreenState extends State<ActivityChatThreadScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, i) {
                     final m = messages[i];
-                    if (m.isMemberLeftEvent) {
+                    if (m.isSystemEvent) {
                       return Padding(
                         padding: const EdgeInsets.only(top: 6, bottom: 18),
                         child: Column(
@@ -196,7 +257,9 @@ class _ActivityChatThreadScreenState extends State<ActivityChatThreadScreen> {
                             return false;
                           },
                           background: const _SwipeReplyBackground(),
-                          child: ConstrainedBox(
+                          child: GestureDetector(
+                            onLongPress: () => _showMessageActions(m),
+                            child: ConstrainedBox(
                             constraints: BoxConstraints(
                               maxWidth: MediaQuery.sizeOf(context).width * 0.82,
                             ),
@@ -263,6 +326,7 @@ class _ActivityChatThreadScreenState extends State<ActivityChatThreadScreen> {
                               ),
                             ),
                           ),
+                          ),
                         ),
                       ),
                     );
@@ -271,96 +335,152 @@ class _ActivityChatThreadScreenState extends State<ActivityChatThreadScreen> {
               },
             ),
           ),
-          Material(
-            color: context.palette.card,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_replyDraft != null)
-                      _ReplyComposerStrip(
-                        draft: _replyDraft!,
-                        onCancel: () => setState(() => _replyDraft = null),
+              if (chatEnded)
+                Material(
+                  color: context.palette.card,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      child: Text(
+                        'Messaging is closed. You can still read past messages.',
+                        textAlign: TextAlign.center,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: context.palette.textMuted,
+                          height: 1.4,
+                        ),
                       ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _textCtrl,
-                            minLines: 1,
-                            maxLines: 5,
-                            textCapitalization: TextCapitalization.sentences,
-                            style: textTheme.bodyLarge?.copyWith(
-                              color: context.palette.textPrimary,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: _replyDraft != null
-                                  ? 'Reply…'
-                                  : 'Message the group…',
-                              hintStyle:
-                                  TextStyle(color: context.palette.textMuted),
-                              filled: true,
-                              fillColor: context.palette.surface,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide(
-                                  color: context.palette.chipBorder,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide(
-                                  color: context.palette.chipBorder,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide(
-                                  color: context.palette.liveAccent,
-                                  width: 1.5,
-                                ),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                            ),
-                            onSubmitted: (_) => _send(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          onPressed: _sending ? null : _send,
-                          style: IconButton.styleFrom(
-                            backgroundColor: context.palette.joinLive,
-                            foregroundColor:
-                                context.palette.joinLiveForeground,
-                          ),
-                          icon: _sending
-                              ? SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: context
-                                        .palette.joinLiveForeground,
-                                  ),
-                                )
-                              : const Icon(Icons.send_rounded),
-                        ),
-                      ],
                     ),
-                  ],
+                  ),
+                )
+              else
+                Material(
+                  color: context.palette.card,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_replyDraft != null)
+                            _ReplyComposerStrip(
+                              draft: _replyDraft!,
+                              onCancel: () =>
+                                  setState(() => _replyDraft = null),
+                            ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _textCtrl,
+                                  minLines: 1,
+                                  maxLines: 5,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  style: textTheme.bodyLarge?.copyWith(
+                                    color: context.palette.textPrimary,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: _replyDraft != null
+                                        ? 'Reply…'
+                                        : 'Message the group…',
+                                    hintStyle: TextStyle(
+                                      color: context.palette.textMuted,
+                                    ),
+                                    filled: true,
+                                    fillColor: context.palette.surface,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      borderSide: BorderSide(
+                                        color: context.palette.chipBorder,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      borderSide: BorderSide(
+                                        color: context.palette.chipBorder,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      borderSide: BorderSide(
+                                        color: context.palette.liveAccent,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => _send(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton.filled(
+                                onPressed: _sending ? null : _send,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: context.palette.joinLive,
+                                  foregroundColor:
+                                      context.palette.joinLiveForeground,
+                                ),
+                                icon: _sending
+                                    ? SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: context
+                                              .palette.joinLiveForeground,
+                                        ),
+                                      )
+                                    : const Icon(Icons.send_rounded),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ActivityEndedChatBanner extends StatelessWidget {
+  const _ActivityEndedChatBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final textTheme = Theme.of(context).textTheme;
+    return Material(
+      color: p.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.info_outline, size: 20, color: p.textMuted),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'This activity has ended.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: p.textSecondary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

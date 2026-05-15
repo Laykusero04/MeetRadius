@@ -1,1 +1,22 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"meetradius-ae49c","appId":"1:555308609426:android:33880fc9797d4dc424db4b","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"meetradius-ae49c","configurations":{"android":"1:555308609426:android:33880fc9797d4dc424db4b","ios":"1:555308609426:ios:e0aa054af47f1ce924db4b"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "meetradius-ae49c",
+          "appId": "1:555308609426:android:33880fc9797d4dc424db4b",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "meetradius-ae49c",
+          "configurations": {
+            "android": "1:555308609426:android:33880fc9797d4dc424db4b",
+            "ios": "1:555308609426:ios:e0aa054af47f1ce924db4b"
+          }
+        }
+      }
+    }
+  }
+}

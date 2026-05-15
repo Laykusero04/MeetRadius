@@ -1,15 +1,18 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/theme/meet_radius_palette.dart';
-import '../../../core/theme/theme_cubit.dart';
-import '../../../shared/widgets/simple_menu_page.dart';
 import '../../../shared/widgets/brand_gradient.dart';
+import '../../../shared/widgets/menu_list_tile.dart';
 import '../../feed/presentation/widgets/feed_create_speed_dial.dart';
 import '../../profile/data/watch_current_user_profile.dart';
 import '../../profile/domain/user_profile.dart';
 import '../../profile/presentation/profile_screen.dart';
+import '../../help/presentation/help_support_screen.dart';
+import '../../legal/presentation/terms_privacy_screen.dart';
+import '../../invite/presentation/invite_friends_screen.dart';
+import '../../social/presentation/friends_screen.dart';
+import '../../settings/presentation/settings_screen.dart';
 
 void _pushUserProfileRoute(BuildContext context) {
   Navigator.of(context).push<void>(
@@ -114,63 +117,58 @@ class MenuScreen extends StatelessWidget {
           },
         ),
         const SizedBox(height: 12),
-        const _ThemeAppearanceTile(),
-        const SizedBox(height: 8),
-        _MenuTile(
+        MenuListTile(
           icon: Icons.settings_outlined,
           label: 'Settings',
           onTap: () {
-            Navigator.of(context).push(
+            Navigator.of(context).push<void>(
               MaterialPageRoute<void>(
-                builder: (_) => const SimpleMenuPage(
-                  title: 'Settings',
-                  message:
-                      'Notifications, privacy, and blocked users will live here.',
-                ),
+                builder: (_) => const SettingsScreen(),
               ),
             );
           },
         ),
-        _MenuTile(
+        MenuListTile(
+          icon: Icons.people_outline,
+          label: 'Friends',
+          subtitle: 'Following, search, and invites',
+          onTap: () {
+            Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => const FriendsScreen(),
+              ),
+            );
+          },
+        ),
+        MenuListTile(
           icon: Icons.person_add_outlined,
           label: 'Invite friends',
           onTap: () {
-            Navigator.of(context).push(
+            Navigator.of(context).push<void>(
               MaterialPageRoute<void>(
-                builder: (_) => const SimpleMenuPage(
-                  title: 'Invite friends',
-                  message:
-                      'Share your invite link or contacts flow will go here.',
-                ),
+                builder: (_) => const InviteFriendsScreen(),
               ),
             );
           },
         ),
-        _MenuTile(
+        MenuListTile(
           icon: Icons.help_outline,
           label: 'Help & support',
           onTap: () {
-            Navigator.of(context).push(
+            Navigator.of(context).push<void>(
               MaterialPageRoute<void>(
-                builder: (_) => const SimpleMenuPage(
-                  title: 'Help & support',
-                  message:
-                      'FAQs, safety tips, and contact support will be linked here.',
-                ),
+                builder: (_) => const HelpSupportScreen(),
               ),
             );
           },
         ),
-        _MenuTile(
+        MenuListTile(
           icon: Icons.description_outlined,
           label: 'Terms & privacy',
           onTap: () {
-            Navigator.of(context).push(
+            Navigator.of(context).push<void>(
               MaterialPageRoute<void>(
-                builder: (_) => const SimpleMenuPage(
-                  title: 'Terms & privacy',
-                  message: 'Legal pages placeholder.',
-                ),
+                builder: (_) => const TermsPrivacyScreen(),
               ),
             );
           },
@@ -179,7 +177,7 @@ class MenuScreen extends StatelessWidget {
           padding: EdgeInsets.symmetric(vertical: 8),
           child: Divider(),
         ),
-        _MenuTile(
+        MenuListTile(
           icon: Icons.logout,
           label: 'Log out',
           destructive: true,
@@ -230,128 +228,6 @@ class MenuScreen extends StatelessWidget {
           },
         ),
       ],
-    );
-  }
-}
-
-class _ThemeAppearanceTile extends StatelessWidget {
-  const _ThemeAppearanceTile();
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    final mode = context.watch<ThemeCubit>().state;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: p.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: p.cardBorderSubtle),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.contrast, color: p.textSecondary, size: 22),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Appearance',
-                  style: textTheme.titleSmall?.copyWith(
-                    color: p.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  mode == ThemeMode.dark ? 'Dark theme' : 'Light theme',
-                  style: textTheme.bodySmall?.copyWith(color: p.textMuted),
-                ),
-              ],
-            ),
-          ),
-          SegmentedButton<ThemeMode>(
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment<ThemeMode>(
-                value: ThemeMode.light,
-                icon: Icon(Icons.light_mode_outlined, size: 20),
-                tooltip: 'Light',
-              ),
-              ButtonSegment<ThemeMode>(
-                value: ThemeMode.dark,
-                icon: Icon(Icons.dark_mode_outlined, size: 20),
-                tooltip: 'Dark',
-              ),
-            ],
-            selected: {mode},
-            onSelectionChanged: (selection) {
-              if (selection.isEmpty) return;
-              context.read<ThemeCubit>().setThemeMode(selection.first);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MenuTile extends StatelessWidget {
-  const _MenuTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.destructive = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool destructive;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    final color = destructive ? p.liveDot : p.textPrimary;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: p.card,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Icon(icon, color: color, size: 22),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: p.textMuted,
-                  size: 22,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

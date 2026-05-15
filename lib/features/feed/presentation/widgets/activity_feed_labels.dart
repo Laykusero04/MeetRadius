@@ -16,3 +16,11 @@ String activityStartsInLine(DateTime startsAt, DateTime now) {
   final days = diff.inDays;
   return 'Starts in $days d';
 }
+
+String activityEndsInLine(DateTime endsAt, DateTime now) {
+  if (!endsAt.isAfter(now)) return 'Ended';
+  final diff = endsAt.difference(now);
+  if (diff.inMinutes < 60) return 'Ends in ${diff.inMinutes} min';
+  if (diff.inHours < 48) return 'Ends in ${diff.inHours} h';
+  return 'Ends in ${diff.inDays} d';
+}

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/meet_radius_palette.dart';
 import '../../../shared/widgets/brand_gradient.dart';
 import '../../activity/data/watch_hosted_activities.dart';
+import '../../activity/data/watch_joined_activities.dart';
 import '../../activity/domain/activity.dart';
 import '../../activity/domain/activity_capacity_labels.dart';
 import '../../activity/presentation/host_activity_actions_sheet.dart';
@@ -79,7 +80,7 @@ class _ProfileTikTokLayoutState extends State<_ProfileTikTokLayout>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -156,38 +157,59 @@ class _ProfileTikTokLayoutState extends State<_ProfileTikTokLayout>
         const SizedBox(height: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: StreamBuilder<List<Activity>>(
-                  stream: watchHostedActivities(uid),
-                  builder: (context, snap) {
-                    final n = snap.hasData ? snap.data!.length : null;
-                    return _StatCell(
-                      value: n,
-                      label: 'Activities',
-                      palette: p,
-                      textTheme: textTheme,
-                    );
-                  },
-                ),
-              ),
-              Container(width: 1, height: 36, color: p.cardBorderSubtle),
-              Expanded(
-                child: StreamBuilder<List<GalleryPost>>(
-                  stream: watchMyGallery(uid),
-                  builder: (context, snap) {
-                    final n = snap.hasData ? snap.data!.length : null;
-                    return _StatCell(
-                      value: n,
-                      label: 'Posts',
-                      palette: p,
-                      textTheme: textTheme,
-                    );
-                  },
-                ),
-              ),
-            ],
+          child: StreamBuilder<List<Activity>>(
+            stream: watchHostedActivities(uid),
+            builder: (context, hostedSnap) {
+              final hosted = hostedSnap.data ?? const <Activity>[];
+              return StreamBuilder<List<Activity>>(
+                stream: watchJoinedActivities(uid),
+                builder: (context, joinedSnap) {
+                  final joined = joinedSnap.data ?? const <Activity>[];
+                  final checkIns = [
+                    ...hosted,
+                    ...joined,
+                  ].where((a) => a.hasCheckedIn(uid)).length;
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: _StatCell(
+                          value: hosted.length,
+                          label: 'Hosted',
+                          palette: p,
+                          textTheme: textTheme,
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 36,
+                        color: p.cardBorderSubtle,
+                      ),
+                      Expanded(
+                        child: _StatCell(
+                          value: joined.length,
+                          label: 'Joined',
+                          palette: p,
+                          textTheme: textTheme,
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 36,
+                        color: p.cardBorderSubtle,
+                      ),
+                      Expanded(
+                        child: _StatCell(
+                          value: checkIns,
+                          label: 'Check-ins',
+                          palette: p,
+                          textTheme: textTheme,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
           ),
         ),
         if (showDetails) ...[
@@ -230,8 +252,13 @@ class _ProfileTikTokLayoutState extends State<_ProfileTikTokLayout>
           tabs: const [
             Tab(
               height: 44,
-              icon: Icon(Icons.view_list_rounded, size: 22),
-              text: 'Activities',
+              icon: Icon(Icons.mic_external_on_outlined, size: 22),
+              text: 'Hosting',
+            ),
+            Tab(
+              height: 44,
+              icon: Icon(Icons.event_available_outlined, size: 22),
+              text: 'Joined',
             ),
             Tab(
               height: 44,
@@ -246,6 +273,7 @@ class _ProfileTikTokLayoutState extends State<_ProfileTikTokLayout>
             controller: _tabController,
             children: [
               _HostedActivitiesTab(uid: uid),
+              _JoinedActivitiesTab(uid: uid),
               _GalleryPhotosTab(uid: uid),
             ],
           ),
@@ -367,6 +395,160 @@ class _HostedActivitiesTab extends StatelessWidget {
   }
 }
 
+class _JoinedActivitiesTab extends StatelessWidget {
+  const _JoinedActivitiesTab({required this.uid});
+
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final textTheme = Theme.of(context).textTheme;
+
+    return StreamBuilder<List<Activity>>(
+      stream: watchJoinedActivities(uid),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Could not load joined activities.',
+              style: textTheme.bodyMedium?.copyWith(color: p.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: p.brandCyan,
+            ),
+          );
+        }
+        final list = snapshot.data!;
+        if (list.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.group_outlined, size: 52, color: p.textMuted),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No joined activities',
+                    style: textTheme.titleMedium?.copyWith(
+                      color: p.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Join something from the Feed or Map — it will appear here.',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: p.textSecondary,
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          itemCount: list.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, i) =>
+              _JoinedActivityListCard(activity: list[i], uid: uid),
+        );
+      },
+    );
+  }
+}
+
+class _JoinedActivityListCard extends StatelessWidget {
+  const _JoinedActivityListCard({
+    required this.activity,
+    required this.uid,
+  });
+
+  final Activity activity;
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final textTheme = Theme.of(context).textTheme;
+    final schedule = activitySchedulePill(activity.startsAt);
+    final title = activity.title.isEmpty ? activity.category : activity.title;
+    final checkedIn = activity.hasCheckedIn(uid);
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => openFeedActivityDetail(
+          context,
+          activityId: activity.id,
+          activityTitle: activity.title,
+        ),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: p.cardBorderSubtle),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: textTheme.titleSmall?.copyWith(
+                          color: p.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        schedule,
+                        style: textTheme.labelMedium?.copyWith(
+                          color: p.textSecondary,
+                        ),
+                      ),
+                      if (checkedIn) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Checked in',
+                          style: textTheme.labelSmall?.copyWith(
+                            color: p.liveAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: p.textMuted),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 IconData _hostingCategoryIcon(String category) {
   return switch (category) {
     'Sports' => Icons.sports_basketball,
@@ -462,7 +644,10 @@ class _HostedActivityListCard extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  _HostingStatusChip(isLive: activity.isLive),
+                                  _HostingStatusChip(
+                                    isLive: activity.isLive,
+                                    isEnded: activity.isEnded,
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -547,14 +732,37 @@ class _HostedActivityListCard extends StatelessWidget {
 }
 
 class _HostingStatusChip extends StatelessWidget {
-  const _HostingStatusChip({required this.isLive});
+  const _HostingStatusChip({
+    required this.isLive,
+    this.isEnded = false,
+  });
 
   final bool isLive;
+  final bool isEnded;
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     final textTheme = Theme.of(context).textTheme;
+    if (isEnded) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: p.textMuted.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: p.chipBorder),
+        ),
+        child: Text(
+          'ENDED',
+          style: textTheme.labelSmall?.copyWith(
+            color: p.textMuted,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+            fontSize: 10,
+          ),
+        ),
+      );
+    }
     if (isLive) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

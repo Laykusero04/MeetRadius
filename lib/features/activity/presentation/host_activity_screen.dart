@@ -8,6 +8,7 @@ import '../../map/data/activity_geo.dart';
 import '../../map/presentation/meeting_spot_map_picker_screen.dart';
 import '../data/create_activity.dart';
 import '../domain/activity_categories.dart';
+import '../domain/activity_schedule.dart';
 
 /// Host flow: step-by-step post to Firestore (`activities` collection).
 class HostActivityScreen extends StatefulWidget {
@@ -27,6 +28,8 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
   static const int _absMax = 30;
   bool _goLive = true;
   late DateTime _startsAt;
+  late DateTime _endsAt;
+  bool _hasScheduledEnd = true;
   bool _posting = false;
   int _step = 0;
   late LatLng _meetingPin;
@@ -61,6 +64,7 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
       candidate = now.add(const Duration(hours: 1));
     }
     _startsAt = candidate;
+    _endsAt = defaultEndsAt(_startsAt);
     _meetingPin = ActivityGeo.davaoAreaCenter;
   }
 
@@ -71,22 +75,15 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
     super.dispose();
   }
 
-  String _startsPickerLabel() {
-    final d = _startsAt;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final dDay = DateTime(d.year, d.month, d.day);
-    final diff = dDay.difference(today).inDays;
-    final dayPart = switch (diff) {
-      0 => 'Today',
-      1 => 'Tomorrow',
-      _ => '${d.month}/${d.day}/${d.year}',
-    };
-    final h24 = d.hour;
-    final hour = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
-    final min = d.minute.toString().padLeft(2, '0');
-    final ampm = h24 >= 12 ? 'PM' : 'AM';
-    return '$dayPart · $hour:$min $ampm';
+  String _startsPickerLabel() => formatActivityDateTimeLabel(_startsAt);
+
+  String _endsPickerLabel() => formatActivityDateTimeLabel(_endsAt);
+
+  void _syncEndsAfterStartsChange() {
+    if (!_hasScheduledEnd) return;
+    if (!_endsAt.isAfter(_startsAt)) {
+      _endsAt = defaultEndsAt(_startsAt);
+    }
   }
 
   Future<void> _pickStarts() async {
@@ -113,6 +110,40 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
 
     setState(() {
       _startsAt = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+      _syncEndsAfterStartsChange();
+    });
+  }
+
+  Future<void> _pickEnds() async {
+    if (!_hasScheduledEnd) return;
+    final first = DateTime(_startsAt.year, _startsAt.month, _startsAt.day);
+    final last = first.add(const Duration(days: 365));
+    var initialDate = DateTime(_endsAt.year, _endsAt.month, _endsAt.day);
+    if (initialDate.isBefore(first)) initialDate = first;
+    if (initialDate.isAfter(last)) initialDate = last;
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: first,
+      lastDate: last,
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_endsAt),
+    );
+    if (pickedTime == null || !mounted) return;
+
+    setState(() {
+      _endsAt = DateTime(
         pickedDate.year,
         pickedDate.month,
         pickedDate.day,
@@ -164,6 +195,15 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
         );
         return;
       }
+      final endErr = validateScheduledEnd(
+        startsAt: _startsAt,
+        endsAt: _hasScheduledEnd ? _endsAt : null,
+        hasScheduledEnd: _hasScheduledEnd,
+      );
+      if (endErr != null) {
+        messenger.showSnackBar(SnackBar(content: Text(endErr)));
+        return;
+      }
       setState(() => _step = 2);
     }
   }
@@ -185,6 +225,17 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
     if (!_startsAt.isAfter(DateTime.now())) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Choose a start time in the future.')),
+      );
+      return;
+    }
+    final endErr = validateScheduledEnd(
+      startsAt: _startsAt,
+      endsAt: _hasScheduledEnd ? _endsAt : null,
+      hasScheduledEnd: _hasScheduledEnd,
+    );
+    if (endErr != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(endErr)),
       );
       return;
     }
@@ -210,6 +261,7 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
         capacityUnlimited: _capacityUnlimited,
         isLive: _goLive,
         startsAt: _startsAt,
+        endsAt: _hasScheduledEnd ? _endsAt : null,
       );
       if (!mounted) return;
       final nav = Navigator.of(context);
@@ -395,6 +447,38 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
           label: _startsPickerLabel(),
           onTap: _pickStarts,
         ),
+        const SizedBox(height: 16),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          value: _hasScheduledEnd,
+          onChanged: (v) => setState(() {
+            _hasScheduledEnd = v;
+            if (v) _syncEndsAfterStartsChange();
+          }),
+          title: Text(
+            'Schedule end time',
+            style: textTheme.titleSmall?.copyWith(
+              color: p.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          subtitle: Text(
+            'Auto-hides from feed and map when time is up. You can still end early.',
+            style: textTheme.bodySmall?.copyWith(color: p.textSecondary),
+          ),
+          activeThumbColor: p.liveAccent,
+          activeTrackColor: p.liveAccent.withValues(alpha: 0.35),
+        ),
+        if (_hasScheduledEnd) ...[
+          const SizedBox(height: 8),
+          const _SectionLabel(text: 'ENDS'),
+          const SizedBox(height: 8),
+          _StaticPickerRow(
+            icon: Icons.timer_off_outlined,
+            label: _endsPickerLabel(),
+            onTap: _pickEnds,
+          ),
+        ],
         const SizedBox(height: 20),
         const _SectionLabel(text: 'MEETING SPOT'),
         const SizedBox(height: 8),
@@ -458,9 +542,16 @@ class _HostActivityScreenState extends State<HostActivityScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                _startsPickerLabel(),
+                'Starts · ${_startsPickerLabel()}',
                 style: textTheme.bodySmall?.copyWith(color: p.textSecondary),
               ),
+              if (_hasScheduledEnd) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Ends · ${_endsPickerLabel()}',
+                  style: textTheme.bodySmall?.copyWith(color: p.textSecondary),
+                ),
+              ],
               const SizedBox(height: 4),
               Text(
                 _spotCtrl.text.trim().isEmpty ? '—' : _spotCtrl.text.trim(),

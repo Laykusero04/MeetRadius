@@ -191,25 +191,12 @@ class UpcomingActivityCard extends StatelessWidget {
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
-            child: isLeaveAction && onJoin != null
-                ? MessengerStyleLeaveRow(
-                    onLeave: joinEnabled ? onJoin : null,
-                    enabled: joinEnabled,
-                  )
-                : OutlinedButton(
-                    onPressed: joinEnabled ? onJoin : null,
+            child: isOwnActivity && onManageOwn != null
+                ? OutlinedButton(
+                    onPressed: onManageOwn,
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: isOwnActivity
-                          ? Colors.white
-                          : context.palette.joinUpcomingForeground,
-                      side: BorderSide(
-                        color: isOwnActivity
-                            ? Colors.white.withValues(alpha: 0.45)
-                            : context.palette.chipBorder,
-                      ),
-                      backgroundColor: isOwnActivity
-                          ? context.palette.joinLive
-                          : context.palette.joinUpcoming,
+                      foregroundColor: context.palette.textPrimary,
+                      side: BorderSide(color: context.palette.chipBorder),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -218,8 +205,30 @@ class UpcomingActivityCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    child: Text(joinButtonLabel),
-                  ),
+                    child: const Text('Manage activity'),
+                  )
+                : isLeaveAction && onJoin != null
+                    ? MessengerStyleLeaveRow(
+                        onLeave: joinEnabled ? onJoin : null,
+                        enabled: joinEnabled,
+                      )
+                    : OutlinedButton(
+                        onPressed: joinEnabled ? onJoin : null,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor:
+                              context.palette.joinUpcomingForeground,
+                          side: BorderSide(color: context.palette.chipBorder),
+                          backgroundColor: context.palette.joinUpcoming,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          textStyle: textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        child: Text(joinButtonLabel),
+                      ),
           ),
         ],
       ),

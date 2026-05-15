@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/meet_radius_palette.dart';
 import '../../activity/domain/activity.dart';
+import '../../safety/data/block_user.dart';
+import '../../safety/data/filter_blocked_activities.dart';
+import '../data/mark_chat_thread_read.dart';
+import '../data/user_chat_prefs.dart';
 import '../data/watch_my_chat_threads.dart';
 import 'activity_chat_thread_screen.dart';
 import 'chat_time_labels.dart';
@@ -69,9 +73,17 @@ class _ChatsThreadList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: StreamBuilder<List<Activity>>(
-            stream: watchMyChatThreads(),
-            builder: (context, snap) {
+          child: StreamBuilder<List<String>>(
+            stream: watchBlockedUserIds(),
+            builder: (context, blockedSnap) {
+              final blocked = blockedSnap.data ?? const <String>[];
+              return StreamBuilder<UserChatPrefs>(
+                stream: watchUserChatPrefs(),
+                builder: (context, prefsSnap) {
+                  final prefs = prefsSnap.data ?? const UserChatPrefs();
+                  return StreamBuilder<List<Activity>>(
+                stream: watchMyChatThreads(),
+                builder: (context, snap) {
               if (snap.hasError) {
                 return Center(
                   child: Padding(
@@ -96,7 +108,10 @@ class _ChatsThreadList extends StatelessWidget {
                   ),
                 );
               }
-              final threads = snap.data ?? const <Activity>[];
+              final threads = filterBlockedActivities(
+                snap.data ?? const <Activity>[],
+                blocked,
+              );
               if (threads.isEmpty) {
                 return Center(
                   child: Padding(
@@ -125,12 +140,15 @@ class _ChatsThreadList extends StatelessWidget {
                   final time = a.lastMessageAt != null
                       ? shortRelativeChatTime(a.lastMessageAt!, now)
                       : '';
+                  final unread = prefs.isThreadUnread(a.id, a.lastMessageAt);
+                  final muted = prefs.isActivityMuted(a.id);
                   return Material(
                     color: context.palette.card,
                     borderRadius: BorderRadius.circular(16),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
                       onTap: () {
+                        markChatThreadRead(a.id);
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (_) => ActivityChatThreadScreen(
@@ -173,14 +191,51 @@ class _ChatsThreadList extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    a.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: textTheme.titleSmall?.copyWith(
-                                      color: context.palette.textPrimary,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          a.title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: textTheme.titleSmall?.copyWith(
+                                            color: context.palette.textPrimary,
+                                            fontWeight: unread
+                                                ? FontWeight.w800
+                                                : FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                      if (muted) ...[
+                                        const SizedBox(width: 6),
+                                        Icon(
+                                          Icons.notifications_off_outlined,
+                                          size: 16,
+                                          color: context.palette.textMuted,
+                                        ),
+                                      ],
+                                      if (unread) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: context.palette.liveAccent,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      ],
+                                      if (a.isEnded) ...[
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Ended',
+                                          style: textTheme.labelSmall?.copyWith(
+                                            color: context.palette.textMuted,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -188,7 +243,12 @@ class _ChatsThreadList extends StatelessWidget {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: textTheme.bodySmall?.copyWith(
-                                      color: context.palette.textSecondary,
+                                      color: unread
+                                          ? context.palette.textPrimary
+                                          : context.palette.textSecondary,
+                                      fontWeight: unread
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
                                       height: 1.3,
                                     ),
                                   ),
@@ -207,6 +267,10 @@ class _ChatsThreadList extends StatelessWidget {
                       ),
                     ),
                   );
+                },
+              );
+                },
+              );
                 },
               );
             },

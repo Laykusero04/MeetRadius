@@ -29,6 +29,7 @@ class LiveActivityCard extends StatelessWidget {
   final String distance;
   final String joinedLabel;
   final String socialLine;
+
   /// e.g. Sports, Coffee — shown as a small pill when set.
   final String? category;
   final List<String> friendInitials;
@@ -39,6 +40,7 @@ class LiveActivityCard extends StatelessWidget {
   final bool isOwnActivity;
   final bool isLeaveAction;
   final VoidCallback? onManageOwn;
+
   /// Opens full activity details (host, members, schedule).
   final VoidCallback? onTapActivity;
 
@@ -152,7 +154,23 @@ class LiveActivityCard extends StatelessWidget {
                   ),
                 ),
           const SizedBox(height: 10),
-          if (isOwnActivity)
+          if (isOwnActivity && onManageOwn != null)
+            OutlinedButton(
+              onPressed: onManageOwn,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: context.palette.textPrimary,
+                side: BorderSide(color: context.palette.chipBorder),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              child: const Text('Manage activity'),
+            )
+          else if (isOwnActivity)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 10),
@@ -160,9 +178,7 @@ class LiveActivityCard extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 gradient: BrandGradient.horizontal(context.palette),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.35),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
               ),
               child: Text(
                 joinButtonLabel,

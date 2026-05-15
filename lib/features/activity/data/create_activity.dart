@@ -17,6 +17,7 @@ Future<void> createActivity({
   required bool capacityUnlimited,
   required bool isLive,
   required DateTime startsAt,
+  DateTime? endsAt,
 }) async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) {
@@ -35,6 +36,7 @@ Future<void> createActivity({
     'memberIds': <String>[user.uid],
     'isLive': isLive,
     'startsAt': Timestamp.fromDate(startsAt),
+    if (endsAt != null) 'endsAt': Timestamp.fromDate(endsAt),
     'hostUid': user.uid,
     if (user.email != null) 'hostEmail': user.email,
     'createdAt': FieldValue.serverTimestamp(),
